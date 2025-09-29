@@ -7,7 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Switch } from './ui/switch';
-import { Upload, Moon, Sun } from 'lucide-react';
+import { Alert, AlertDescription } from './ui/alert';
+import { Upload, Moon, Sun, Loader2 } from 'lucide-react';
+import { apiService } from '../services/api';
 
 export function AuthPage() {
   const { login } = useAuth();
@@ -20,33 +22,51 @@ export function AuthPage() {
     robloxUsername: '',
     avatar: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock login
-    login({
-      username: loginForm.username,
-      email: 'user@example.com',
-      robloxUsername: 'TestUser123',
-      avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      rating: 4,
-      vouchCount: 23,
-      joinDate: new Date().toISOString()
-    });
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await apiService.login({
+        username: loginForm.username,
+        password: loginForm.password
+      });
+      
+      // Login successful, update auth context
+      login(response.user);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock registration
-    login({
-      username: registerForm.username,
-      email: registerForm.email,
-      robloxUsername: registerForm.robloxUsername,
-      avatar: registerForm.avatar || 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      rating: 0,
-      vouchCount: 0,
-      joinDate: new Date().toISOString()
-    });
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await apiService.register({
+        username: registerForm.username,
+        email: registerForm.email,
+        password: registerForm.password,
+        robloxUsername: registerForm.robloxUsername || undefined
+      });
+      
+      // Registration successful, update auth context
+      login(response.user);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -92,14 +112,20 @@ export function AuthPage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {error && (
+                    <Alert className="border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
                   <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
+                    <Label htmlFor="username">Username or Email</Label>
                     <Input
                       id="username"
                       type="text"
-                      placeholder="Enter your username"
+                      placeholder="Enter your username or email"
                       value={loginForm.username}
                       onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
+                      disabled={isLoading}
                       required
                     />
                   </div>
@@ -111,11 +137,23 @@ export function AuthPage() {
                       placeholder="Enter your password"
                       value={loginForm.password}
                       onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                      disabled={isLoading}
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-                    Sign In
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Signing In...
+                      </>
+                    ) : (
+                      'Sign In'
+                    )}
                   </Button>
                 </form>
               </CardContent>
@@ -130,6 +168,12 @@ export function AuthPage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleRegister} className="space-y-4">
+                  {error && (
+                    <Alert className="border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  
                   {/* Avatar Upload */}
                   <div className="space-y-2">
                     <Label>Profile Avatar</Label>
@@ -137,7 +181,7 @@ export function AuthPage() {
                       <Avatar className="w-16 h-16">
                         <AvatarImage src={registerForm.avatar} />
                         <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                          {registerForm.username?.[0] || <Upload className="w-6 h-6" />}
+                          {registerForm.username?.[0]?.toUpperCase() || <Upload className="w-6 h-6" />}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
@@ -146,6 +190,7 @@ export function AuthPage() {
                           placeholder="Avatar URL (optional)"
                           value={registerForm.avatar}
                           onChange={(e) => setRegisterForm(prev => ({ ...prev, avatar: e.target.value }))}
+                          disabled={isLoading}
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                           Enter an image URL for your avatar
@@ -162,6 +207,7 @@ export function AuthPage() {
                       placeholder="Choose a username"
                       value={registerForm.username}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, username: e.target.value }))}
+                      disabled={isLoading}
                       required
                     />
                   </div>
@@ -174,6 +220,7 @@ export function AuthPage() {
                       placeholder="Enter your email"
                       value={registerForm.email}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
+                      disabled={isLoading}
                       required
                     />
                   </div>
@@ -183,9 +230,10 @@ export function AuthPage() {
                     <Input
                       id="roblox-username"
                       type="text"
-                      placeholder="Enter your Roblox username"
+                      placeholder="Enter your Roblox username (optional)"
                       value={registerForm.robloxUsername}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, robloxUsername: e.target.value }))}
+                      disabled={isLoading}
                     />
                     <p className="text-xs text-muted-foreground">
                       Link your Roblox account for verification
@@ -197,15 +245,28 @@ export function AuthPage() {
                     <Input
                       id="reg-password"
                       type="password"
-                      placeholder="Create a password"
+                      placeholder="Create a password (min. 6 characters)"
                       value={registerForm.password}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
+                      disabled={isLoading}
                       required
+                      minLength={6}
                     />
                   </div>
                   
-                  <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-                    Create Account
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Create Account'
+                    )}
                   </Button>
                 </form>
               </CardContent>

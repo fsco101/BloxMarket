@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Avatar, AvatarFallback } from './ui/avatar';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { apiService } from '../services/api';
 import { 
   MessageSquare, 
   Search, 
@@ -14,134 +18,246 @@ import {
   Clock,
   Eye,
   Pin,
-  Lock,
   TrendingUp,
   Users,
-  MessageCircle
+  MessageCircle,
+  Loader2,
+  AlertCircle,
+  Upload,
+  X,
+  ImageIcon
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function Forums() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('activity');
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  const [newPost, setNewPost] = useState({
+    title: '',
+    content: '',
+    category: 'general'
+  });
+  
+  // Image upload state
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
-  // Mock forum data
-  const forumPosts = [
-    {
-      id: 1,
-      title: 'Best Trading Strategies for New Players - Updated Guide 2024',
-      content: 'After trading for 3+ years, here are my top tips for new traders looking to get started safely...',
-      author: {
-        username: 'TradingExpert',
-        robloxUsername: 'TradingExpert',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 234,
-        role: 'expert'
-      },
-      category: 'guides',
-      timestamp: '2 hours ago',
-      lastActivity: '15 min ago',
-      upvotes: 45,
-      downvotes: 2,
-      replies: 23,
-      views: 342,
-      pinned: true,
-      tags: ['guide', 'trading', 'beginners']
-    },
-    {
-      id: 2,
-      title: 'SCAM ALERT: New Fake Middleman Service Going Around',
-      content: 'WARNING: There\'s a new scam where fake middlemen are impersonating verified users. Here\'s how to spot them...',
-      author: {
-        username: 'SafetyFirst',
-        robloxUsername: 'SafetyFirst',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 4,
-        vouchCount: 89,
-        role: 'moderator'
-      },
-      category: 'safety',
-      timestamp: '4 hours ago',
-      lastActivity: '1 hour ago',
-      upvotes: 67,
-      downvotes: 0,
-      replies: 15,
-      views: 578,
-      pinned: true,
-      urgent: true,
-      tags: ['scam-alert', 'safety', 'middleman']
-    },
-    {
-      id: 3,
-      title: 'Market Analysis: Dominus Prices Trending Up This Week',
-      content: 'I\'ve been tracking dominus prices across different platforms and noticed some interesting trends...',
-      author: {
-        username: 'MarketAnalyst',
-        robloxUsername: 'MarketAnalyst',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 4,
-        vouchCount: 156
-      },
-      category: 'market-discussion',
-      timestamp: '1 day ago',
-      lastActivity: '3 hours ago',
-      upvotes: 23,
-      downvotes: 1,
-      replies: 8,
-      views: 234,
-      tags: ['market-analysis', 'dominus', 'prices']
-    },
-    {
-      id: 4,
-      title: 'Looking for Trading Partners - Active Daily Trader',
-      content: 'Hey everyone! I\'m looking for reliable trading partners who are active daily. I specialize in...',
-      author: {
-        username: 'ActiveTrader99',
-        robloxUsername: 'ActiveTrader99',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 3,
-        vouchCount: 45
-      },
-      category: 'trading-partners',
-      timestamp: '2 days ago',
-      lastActivity: '6 hours ago',
-      upvotes: 12,
-      downvotes: 0,
-      replies: 34,
-      views: 167,
-      tags: ['trading-partners', 'daily-trader']
-    },
-    {
-      id: 5,
-      title: 'Community Event: Weekly Trading Competition Results!',
-      content: 'Congratulations to this week\'s winners of our trading competition! Here are the results and next week\'s theme...',
-      author: {
-        username: 'EventManager',
-        robloxUsername: 'EventManager',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 0,
-        role: 'staff'
-      },
-      category: 'events',
-      timestamp: '3 days ago',
-      lastActivity: '1 day ago',
-      upvotes: 89,
-      downvotes: 3,
-      replies: 56,
-      views: 445,
-      tags: ['events', 'competition', 'community']
+  // Enhanced Image Display Component with retry functionality
+  interface ImageDisplayProps {
+    src: string;
+    alt: string;
+    className?: string;
+    fallback?: React.ReactNode;
+  }
+
+  function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+    const [retryCount, setRetryCount] = useState(0);
+
+    const handleImageLoad = () => {
+      setImageLoading(false);
+      setImageError(false);
+    };
+
+    const handleImageError = () => {
+      if (retryCount < 2) {
+        // Retry loading the image up to 2 times
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          setImageError(false);
+          setImageLoading(true);
+        }, 1000);
+      } else {
+        setImageLoading(false);
+        setImageError(true);
+      }
+    };
+
+    const handleRetry = () => {
+      setRetryCount(0);
+      setImageError(false);
+      setImageLoading(true);
+    };
+
+    if (imageError) {
+      return fallback || (
+        <div className={`bg-gray-100 dark:bg-gray-800 flex items-center justify-center ${className}`}>
+          <div className="text-center text-gray-400">
+            <Upload className="w-8 h-8 mx-auto mb-1" />
+            <span className="text-xs block mb-1">Image unavailable</span>
+            <button
+              onClick={handleRetry}
+              className="text-xs text-blue-500 hover:text-blue-600 underline focus:outline-none"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
     }
-  ];
+
+    return (
+      <div className={`relative ${className}`}>
+        {imageLoading && (
+          <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center rounded">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        )}
+        <img
+          src={`${src}?v=${retryCount}`} // Add cache-busting parameter
+          alt={alt}
+          className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+        />
+      </div>
+    );
+  }
+
+  // Image handling functions
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const remainingSlots = 5 - selectedImages.length;
+    const filesToAdd = files.slice(0, remainingSlots);
+    
+    // Validate file types and sizes
+    const validFiles = filesToAdd.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} is not an image file`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error(`${file.name} is too large (max 5MB)`);
+        return false;
+      }
+      return true;
+    });
+    
+    if (validFiles.length > 0) {
+      setSelectedImages(prev => [...prev, ...validFiles]);
+      
+      // Create preview URLs
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreviewUrls(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Load posts from API
+  useEffect(() => {
+    loadPosts();
+  }, [currentPage, filterCategory]);
+
+  const loadPosts = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const params: Record<string, any> = {
+        page: currentPage,
+        limit: 10
+      };
+      
+      if (filterCategory !== 'all') {
+        params.category = filterCategory;
+      }
+      
+      const response = await apiService.getForumPosts(params);
+      setPosts(response || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load posts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!newPost.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    if (!newPost.content.trim()) {
+      setError('Content is required');
+      return;
+    }
+    
+    try {
+      setCreateLoading(true);
+      setError('');
+      
+      console.log('Creating forum post with images:', selectedImages.length);
+      
+      await apiService.createForumPost({
+        title: newPost.title,
+        content: newPost.content,
+        category: newPost.category
+      }, selectedImages);
+      
+      setIsCreateDialogOpen(false);
+      setNewPost({
+        title: '',
+        content: '',
+        category: 'general'
+      });
+      setSelectedImages([]);
+      setImagePreviewUrls([]);
+      
+      // Reload posts to show the new one
+      await loadPosts();
+      
+      console.log('Forum post created successfully');
+      toast.success('Post created successfully! 🎉', {
+        description: 'Your post has been published and is now visible to the community.'
+      });
+    } catch (err: any) {
+      console.error('Failed to create forum post:', err);
+      let errorMessage = 'Failed to create post';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('413')) {
+          errorMessage = 'Images are too large. Please use smaller images (max 5MB each).';
+        } else if (err.message.includes('400')) {
+          errorMessage = 'Invalid data. Please check all fields and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+
 
   const categories = [
     { value: 'all', label: 'All Categories' },
-    { value: 'guides', label: 'Guides & Tutorials' },
-    { value: 'market-discussion', label: 'Market Discussion' },
-    { value: 'trading-partners', label: 'Trading Partners' },
-    { value: 'safety', label: 'Safety & Scams' },
-    { value: 'events', label: 'Events & Competitions' },
+    { value: 'trading_tips', label: 'Trading Tips' },
+    { value: 'scammer_reports', label: 'Scammer Reports' },
+    { value: 'game_updates', label: 'Game Updates' },
     { value: 'general', label: 'General Discussion' }
   ];
 
@@ -154,28 +270,20 @@ export function Forums() {
     }
   };
 
-  const filteredPosts = forumPosts.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         post.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = filterCategory === 'all' || post.category === filterCategory;
-    return matchesSearch && matchesCategory;
+  const filteredPosts = posts.filter((post: any) => {
+    const matchesSearch = searchTerm === '' || 
+      post.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      post.content?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
 
-  const sortedPosts = filteredPosts.sort((a, b) => {
-    // Pinned posts always come first
-    if (a.pinned && !b.pinned) return -1;
-    if (!a.pinned && b.pinned) return 1;
-    
+  const sortedPosts = [...filteredPosts].sort((a: any, b: any) => {
     switch (sortBy) {
       case 'activity':
-        return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
       case 'newest':
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       case 'popular':
         return (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes);
-      case 'replies':
-        return b.replies - a.replies;
       default:
         return 0;
     }
@@ -194,10 +302,170 @@ export function Forums() {
             <p className="text-muted-foreground">Discuss trading, share tips, and connect with the community</p>
           </div>
           
-          <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            New Post
-          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white">
+                <Plus className="w-4 h-4 mr-2" />
+                New Post
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create New Post</DialogTitle>
+                <DialogDescription>
+                  Share your thoughts with the community
+                </DialogDescription>
+              </DialogHeader>
+              
+              <form onSubmit={handleCreatePost} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="post-title">Title *</Label>
+                  <Input
+                    id="post-title"
+                    placeholder="Enter your post title"
+                    value={newPost.title}
+                    onChange={(e) => setNewPost(prev => ({ ...prev, title: e.target.value }))}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="post-content">Content *</Label>
+                  <Textarea
+                    id="post-content"
+                    placeholder="Write your post content..."
+                    value={newPost.content}
+                    onChange={(e) => setNewPost(prev => ({ ...prev, content: e.target.value }))}
+                    className="min-h-[150px]"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="post-category">Category</Label>
+                  <Select value={newPost.category} onValueChange={(value) => setNewPost(prev => ({ ...prev, category: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(cat => cat.value !== 'all').map(category => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Image Upload Section */}
+                <div className="space-y-2">
+                  <Label>Images (optional - up to 5 images)</Label>
+                  <div 
+                    className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-colors"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                      const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+                      if (files.length > 0) {
+                        const input = document.getElementById('forum-image-upload') as HTMLInputElement;
+                        const dt = new DataTransfer();
+                        files.forEach(file => dt.items.add(file));
+                        input.files = dt.files;
+                        handleImageSelect({ target: input } as React.ChangeEvent<HTMLInputElement>);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                      id="forum-image-upload"
+                      disabled={selectedImages.length >= 5}
+                    />
+                    <label
+                      htmlFor="forum-image-upload"
+                      className={`cursor-pointer flex flex-col items-center gap-2 ${
+                        selectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">
+                        {selectedImages.length >= 5 
+                          ? 'Maximum 5 images reached' 
+                          : 'Click to upload images or drag and drop'
+                        }
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        PNG, JPG, GIF up to 5MB each • {selectedImages.length}/5 selected
+                      </span>
+                    </label>
+                  </div>
+                  
+                  {/* Image Previews */}
+                  {imagePreviewUrls.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                          {imagePreviewUrls.length} image{imagePreviewUrls.length !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {imagePreviewUrls.map((url, index) => (
+                          <div key={index} className="relative group">
+                            <div className="aspect-square border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                              <ImageDisplay
+                                src={url}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-full"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(index)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {error && (
+                  <div className="text-red-500 text-sm">{error}</div>
+                )}
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={createLoading}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" disabled={createLoading}>
+                    {createLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Create Post'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -246,62 +514,95 @@ export function Forums() {
         <div className="flex items-center justify-center gap-8 text-sm">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-4 h-4 text-blue-500" />
-            <span>{sortedPosts.length} Active Discussions</span>
+            <span>{sortedPosts.length} Posts Found</span>
           </div>
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-green-500" />
-            <span>1,247 Online Members</span>
+            <span>Page {currentPage}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-purple-500" />
-            <span>89 Posts Today</span>
-          </div>
+          {loading && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+              <span>Loading...</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto p-6 space-y-4">
-          {sortedPosts.map((post) => (
-            <Card key={post.id} className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${post.pinned ? 'ring-2 ring-blue-500/20 bg-blue-50/30 dark:bg-blue-950/20' : ''} ${post.urgent ? 'ring-2 ring-red-500/20 bg-red-50/30 dark:bg-red-950/20' : ''}`}>
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <span className="ml-2">Loading posts...</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="flex items-center justify-center py-12">
+              <AlertCircle className="w-8 h-8 text-red-500 mr-2" />
+              <span className="text-red-500">{error}</span>
+            </div>
+          )}
+          
+          {!loading && !error && sortedPosts.map((post: any) => (
+            <Card key={post.post_id} className="hover:shadow-lg transition-all duration-200 cursor-pointer">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
                     <Avatar className="w-12 h-12">
-                      <AvatarImage src={post.author.avatar} />
-                      <AvatarFallback>{post.author.username[0]}</AvatarFallback>
+                      <AvatarFallback>{post.username?.[0] || 'U'}</AvatarFallback>
                     </Avatar>
                     
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        {post.pinned && <Pin className="w-4 h-4 text-blue-500" />}
-                        {post.urgent && <span className="text-red-500 font-bold text-xs">URGENT</span>}
                         <h3 className="font-semibold text-lg hover:text-blue-600 transition-colors">
                           {post.title}
                         </h3>
                       </div>
                       
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium text-sm">{post.author.username}</span>
-                        {post.author.role && (
-                          <Badge className={getRoleColor(post.author.role)} variant="secondary">
-                            {post.author.role}
-                          </Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground">@{post.author.robloxUsername}</span>
+                        <span className="font-medium text-sm">{post.username}</span>
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                          {post.credibility_score || 0}★
+                        </Badge>
                       </div>
                       
                       <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
                         {post.content}
                       </p>
                       
-                      {/* Tags */}
+                      {/* Images */}
+                      {post.images && post.images.length > 0 && (
+                        <div className="mb-3">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {post.images.slice(0, 3).map((image: any, imageIndex: number) => (
+                              <div key={imageIndex} className="aspect-square overflow-hidden rounded-lg border">
+                                <ImageDisplay
+                                  src={`http://localhost:5000/uploads/forum/${image.filename}`}
+                                  alt={image.originalName || `Image ${imageIndex + 1}`}
+                                  className="w-full h-full"
+                                />
+                              </div>
+                            ))}
+                            {post.images.length > 3 && (
+                              <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg border flex items-center justify-center">
+                                <div className="text-center text-gray-500 dark:text-gray-400">
+                                  <ImageIcon className="w-6 h-6 mx-auto mb-1" />
+                                  <span className="text-xs">+{post.images.length - 3} more</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Category */}
                       <div className="flex flex-wrap gap-1 mb-3">
-                        {post.tags.map((tag, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            #{tag}
-                          </Badge>
-                        ))}
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {post.category?.replace('_', ' ')}
+                        </Badge>
                       </div>
                     </div>
                   </div>
@@ -309,9 +610,8 @@ export function Forums() {
                   <div className="text-right text-xs text-muted-foreground">
                     <div className="flex items-center gap-1 mb-1">
                       <Clock className="w-3 h-3" />
-                      <span>{post.timestamp}</span>
+                      <span>{new Date(post.created_at).toLocaleDateString()}</span>
                     </div>
-                    <div>Last activity: {post.lastActivity}</div>
                   </div>
                 </div>
               </CardHeader>
@@ -321,15 +621,12 @@ export function Forums() {
                   <div className="flex items-center gap-6 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Eye className="w-4 h-4" />
-                      <span>{post.views} views</span>
+                      <span>ID: {post.post_id.slice(-6)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <MessageSquare className="w-4 h-4" />
-                      <span>{post.replies} replies</span>
+                      <span>{post.commentCount || 0} replies</span>
                     </div>
-                    <Badge variant="outline" className="capitalize">
-                      {post.category.replace('-', ' ')}
-                    </Badge>
                   </div>
                   
                   <div className="flex items-center gap-2">
