@@ -349,6 +349,7 @@ class ApiService {
   }
 
   async updateProfile(profileData: {
+    username?: string;
     robloxUsername?: string;
     bio?: string;
     discordUsername?: string;

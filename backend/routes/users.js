@@ -189,10 +189,11 @@ router.get('/:userId', async (req, res) => {
 // Update user profile (protected)
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
-    const { robloxUsername, bio, discordUsername, timezone } = req.body;
+    const { username, robloxUsername, bio, discordUsername, timezone } = req.body;
     const userId = req.user.userId;
 
     const updateData = {};
+    if (username !== undefined) updateData.username = username;
     if (robloxUsername !== undefined) updateData.roblox_username = robloxUsername;
     if (bio !== undefined) updateData.bio = bio;
     if (discordUsername !== undefined) updateData.discord_username = discordUsername;
