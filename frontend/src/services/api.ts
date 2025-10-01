@@ -393,6 +393,98 @@ class ApiService {
     });
   }
 
+  // Admin methods
+  async getAdminStats() {
+    return this.request('/admin/stats');
+  }
+
+  async getAllUsers(params?: { page?: number; limit?: number; search?: string; role?: string }) {
+    const queryString = params ? new URLSearchParams(
+      Object.entries(params).reduce((acc, [key, value]) => {
+        if (value !== undefined) acc[key] = value.toString();
+        return acc;
+      }, {} as Record<string, string>)
+    ).toString() : '';
+    return this.request(`/admin/users?${queryString}`);
+  }
+
+  async getReports(params?: { page?: number; limit?: number; status?: string }) {
+    const queryString = params ? new URLSearchParams(
+      Object.entries(params).reduce((acc, [key, value]) => {
+        if (value !== undefined) acc[key] = value.toString();
+        return acc;
+      }, {} as Record<string, string>)
+    ).toString() : '';
+    return this.request(`/admin/reports?${queryString}`);
+  }
+
+  async getFlaggedPosts(params?: { page?: number; limit?: number; severity?: string }) {
+    const queryString = params ? new URLSearchParams(
+      Object.entries(params).reduce((acc, [key, value]) => {
+        if (value !== undefined) acc[key] = value.toString();
+        return acc;
+      }, {} as Record<string, string>)
+    ).toString() : '';
+    return this.request(`/admin/flagged-posts?${queryString}`);
+  }
+
+  async getVerificationRequests(params?: { page?: number; limit?: number }) {
+    const queryString = params ? new URLSearchParams(
+      Object.entries(params).reduce((acc, [key, value]) => {
+        if (value !== undefined) acc[key] = value.toString();
+        return acc;
+      }, {} as Record<string, string>)
+    ).toString() : '';
+    return this.request(`/admin/verification-requests?${queryString}`);
+  }
+
+  async banUser(userId: string, reason?: string) {
+    return this.request(`/admin/users/${userId}/ban`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'ban', reason }),
+    });
+  }
+
+  async unbanUser(userId: string) {
+    return this.request(`/admin/users/${userId}/ban`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'unban' }),
+    });
+  }
+
+  async updateUserRole(userId: string, role: string) {
+    return this.request(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async updateReportStatus(reportId: string, status: string, action?: string) {
+    return this.request(`/admin/reports/${reportId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, action }),
+    });
+  }
+
+  async deleteFlaggedPost(postId: string) {
+    return this.request(`/admin/posts/${postId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async approveVerification(userId: string, type: string) {
+    return this.request(`/admin/verification/${userId}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify({ type }),
+    });
+  }
+
+  async rejectVerification(userId: string) {
+    return this.request(`/admin/verification/${userId}/reject`, {
+      method: 'PATCH',
+    });
+  }
+
   // Utility methods
   setToken(token: string) {
     this.token = token;

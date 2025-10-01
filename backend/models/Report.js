@@ -11,10 +11,19 @@ const reportSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  post_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ForumPost'
+  },
   reason: {
     type: String,
     required: true,
     trim: true
+  },
+  type: {
+    type: String,
+    enum: ['Scamming', 'Harassment', 'Inappropriate Content', 'Spam', 'Impersonation', 'Other'],
+    default: 'Other'
   },
   status: {
     type: String,

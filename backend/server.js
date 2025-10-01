@@ -18,6 +18,7 @@ import userRoutes from './routes/users.js';
 import tradeRoutes from './routes/trades.js';
 import forumRoutes from './routes/forum.js';
 import eventRoutes from './routes/events.js';
+import adminRoutes from './routes/admin.js';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

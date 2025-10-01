@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'mm', 'mw', 'admin', 'moderator'],
+    enum: ['user', 'verified', 'middleman', 'admin', 'moderator', 'banned'],
     default: 'user'
   },
   bio: {
@@ -52,6 +52,25 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: 50
+  },
+  verification_requested: {
+    type: Boolean,
+    default: false
+  },
+  middleman_requested: {
+    type: Boolean,
+    default: false
+  },
+  ban_reason: {
+    type: String,
+    trim: true
+  },
+  banned_at: {
+    type: Date
+  },
+  lastLogin: {
+    type: Date,
+    default: Date.now
   },
   tokens: [{
     token: {
