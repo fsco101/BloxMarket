@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Avatar, AvatarFallback } from './ui/avatar';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { apiService } from '../services/api';
+import { toast } from 'sonner';
 import { 
   Heart, 
   MessageSquare, 
@@ -16,97 +17,228 @@ import {
   Search,
   Filter,
   Gift,
-  Megaphone
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
+
+// Type definitions
+interface Trade {
+  trade_id: string;
+  item_offered: string;
+  item_requested?: string;
+  description?: string;
+  status: string;
+  created_at: string;
+  username: string;
+  roblox_username: string;
+  credibility_score: number;
+  user_id: string;
+  images?: Array<{ image_url: string; uploaded_at: string }>;
+}
+
+interface ForumPost {
+  post_id: string;
+  title: string;
+  content: string;
+  category: string;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+  username: string;
+  credibility_score: number;
+  user_id: string;
+  images?: Array<{ filename: string; originalName: string; path: string; size: number; mimetype: string }>;
+  commentCount: number;
+}
+
+interface Event {
+  event_id: string;
+  title: string;
+  description: string;
+  start_date?: string;
+  end_date?: string;
+  created_at: string;
+  created_by_username: string;
+}
+
+interface DashboardPost {
+  id: string;
+  type: 'trade' | 'forum' | 'event';
+  title: string;
+  description: string;
+  user: {
+    username: string;
+    robloxUsername?: string;
+    rating: number;
+    vouchCount: number;
+    verified?: boolean;
+    moderator?: boolean;
+  };
+  timestamp: string;
+  comments?: number;
+  likes?: number;
+  items?: string[];
+  wantedItems?: string[];
+  offering?: string;
+  image?: string;
+  category?: string;
+  status?: string;
+}
 
 export function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [posts, setPosts] = useState<DashboardPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState({
+    activeTraders: 0,
+    activeTrades: 0,
+    liveEvents: 0
+  });
+  // Load data from APIs
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError('');
 
-  // Mock data
-  const posts = [
-    {
-      id: 1,
-      type: 'trade',
-      title: 'Trading Dominus Empyreus for Robux',
-      description: 'Looking to trade my Dominus Empyreus for 50k Robux or equivalent value items. Serious offers only!',
-      user: {
-        username: 'TradeMaster99',
-        robloxUsername: 'TradeMaster99',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 47
-      },
-      items: ['Dominus Empyreus'],
-      wantedItems: ['50k Robux'],
-      timestamp: '2 hours ago',
-      comments: 12,
-      likes: 24,
-      image: 'https://images.unsplash.com/photo-1658856413378-288069d87d44?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjB0cmFkaW5nJTIwY2FyZHMlMjBkaWdpdGFsJTIwaXRlbXN8ZW58MXx8fHwxNzU4NTYwNDQ1fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'
-    },
-    {
-      id: 2,
-      type: 'giveaway',
-      title: '🎉 HUGE GIVEAWAY - 100k Robux + Rare Items!',
-      description: 'Celebrating 10k members! Giving away 100k Robux, Dominus, and other rare items. Follow the rules to enter!',
-      user: {
-        username: 'BloxMarketOfficial',
-        robloxUsername: 'BloxMarketOfficial',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 999,
-        verified: true
-      },
-      timestamp: '4 hours ago',
-      comments: 234,
-      likes: 567,
-      entries: 1245
-    },
-    {
-      id: 3,
-      type: 'wishlist',
-      title: 'Looking for Valk Helm - Paying Premium',
-      description: 'Been searching for this item for months! Will pay above market value. Contact me if you have one.',
-      user: {
-        username: 'CollectorPro',
-        robloxUsername: 'CollectorPro',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 4,
-        vouchCount: 18
-      },
-      wantedItems: ['Valk Helm'],
-      offering: '25k Robux',
-      timestamp: '6 hours ago',
-      comments: 8,
-      likes: 15
-    },
-    {
-      id: 4,
-      type: 'announcement',
-      title: '📢 New Trading Rules & Safety Guidelines',
-      description: 'Important updates to our community trading rules. Please read carefully to ensure safe trading practices.',
-      user: {
-        username: 'ModeratorTeam',
-        robloxUsername: 'ModeratorTeam',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 0,
-        verified: true,
-        moderator: true
-      },
-      timestamp: '1 day ago',
-      comments: 45,
-      likes: 123,
-      pinned: true
-    }
-  ];
+        // Fetch data from all APIs in parallel
+        const [tradesData, forumData, eventsData] = await Promise.allSettled([
+          apiService.getTrades({ limit: 10, status: 'open' }),
+          apiService.getForumPosts({ limit: 10 }),
+          apiService.getEvents()
+        ]);
+
+        const allPosts: DashboardPost[] = [];
+        let activeTradeCount = 0;
+        let activeEventCount = 0;
+
+        // Process trades data
+        if (tradesData.status === 'fulfilled' && tradesData.value?.trades) {
+          const trades: Trade[] = tradesData.value.trades;
+          activeTradeCount = trades.filter(trade => trade.status === 'open').length;
+          
+          trades.forEach(trade => {
+            allPosts.push({
+              id: trade.trade_id,
+              type: 'trade',
+              title: `Trading ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : ''}`,
+              description: trade.description || `Looking to trade ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : '. Contact me for offers!'}`,
+              user: {
+                username: trade.username,
+                robloxUsername: trade.roblox_username,
+                rating: Math.min(5, Math.max(1, Math.floor(trade.credibility_score / 20))),
+                vouchCount: Math.floor(trade.credibility_score / 2)
+              },
+              timestamp: new Date(trade.created_at).toLocaleDateString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              items: [trade.item_offered],
+              wantedItems: trade.item_requested ? [trade.item_requested] : undefined,
+              status: trade.status,
+              image: trade.images && trade.images.length > 0 ? `http://localhost:5000${trade.images[0].image_url}` : undefined,
+              comments: Math.floor(Math.random() * 20),
+              likes: Math.floor(Math.random() * 50)
+            });
+          });
+        }
+
+        // Process forum posts data
+        if (forumData.status === 'fulfilled' && Array.isArray(forumData.value)) {
+          const forumPosts: ForumPost[] = forumData.value;
+          
+          forumPosts.forEach(post => {
+            allPosts.push({
+              id: post.post_id,
+              type: 'forum',
+              title: post.title,
+              description: post.content.length > 200 ? post.content.substring(0, 200) + '...' : post.content,
+              user: {
+                username: post.username,
+                rating: Math.min(5, Math.max(1, Math.floor(post.credibility_score / 20))),
+                vouchCount: Math.floor(post.credibility_score / 2)
+              },
+              timestamp: new Date(post.created_at).toLocaleDateString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              comments: post.commentCount || 0,
+              likes: post.upvotes || 0,
+              category: post.category,
+              image: post.images && post.images.length > 0 ? `http://localhost:5000/uploads/forum/${post.images[0].filename}` : undefined
+            });
+          });
+        }
+
+        // Process events data
+        if (eventsData.status === 'fulfilled' && Array.isArray(eventsData.value)) {
+          const events: Event[] = eventsData.value;
+          activeEventCount = events.length;
+          
+          events.forEach(event => {
+            allPosts.push({
+              id: event.event_id,
+              type: 'event',
+              title: event.title,
+              description: event.description || 'Check out this community event!',
+              user: {
+                username: event.created_by_username,
+                rating: 5,
+                vouchCount: 999,
+                verified: true,
+                moderator: true
+              },
+              timestamp: new Date(event.created_at).toLocaleDateString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              comments: Math.floor(Math.random() * 100),
+              likes: Math.floor(Math.random() * 200)
+            });
+          });
+        }
+
+        // Sort posts by timestamp (newest first)
+        allPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        // Calculate real active traders from trades data
+        let activeTraderCount = 0;
+        if (tradesData.status === 'fulfilled' && tradesData.value?.trades) {
+          const uniqueTraders = new Set();
+          tradesData.value.trades.forEach((trade: Trade) => {
+            if (trade.status === 'open') {
+              uniqueTraders.add(trade.user_id);
+            }
+          });
+          activeTraderCount = uniqueTraders.size;
+        }
+        
+        setPosts(allPosts);
+        setStats({
+          activeTraders: activeTraderCount,
+          activeTrades: activeTradeCount,
+          liveEvents: activeEventCount
+        });
+
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+        setError('Failed to load dashboard data. Please try again.');
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
 
   const getPostTypeIcon = (type: string) => {
     switch (type) {
       case 'trade': return <TrendingUp className="w-4 h-4" />;
-      case 'giveaway': return <Gift className="w-4 h-4" />;
-      case 'wishlist': return <Heart className="w-4 h-4" />;
-      case 'announcement': return <Megaphone className="w-4 h-4" />;
+      case 'event': return <Gift className="w-4 h-4" />;
+      case 'forum': return <MessageSquare className="w-4 h-4" />;
       default: return <MessageSquare className="w-4 h-4" />;
     }
   };
@@ -114,9 +246,8 @@ export function Dashboard() {
   const getPostTypeColor = (type: string) => {
     switch (type) {
       case 'trade': return 'bg-blue-500';
-      case 'giveaway': return 'bg-green-500';
-      case 'wishlist': return 'bg-purple-500';
-      case 'announcement': return 'bg-orange-500';
+      case 'event': return 'bg-green-500';
+      case 'forum': return 'bg-purple-500';
       default: return 'bg-gray-500';
     }
   };
@@ -127,6 +258,33 @@ export function Dashboard() {
     const matchesFilter = filterType === 'all' || post.type === filterType;
     return matchesSearch && matchesFilter;
   });
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && posts.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-4" />
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-hidden">
@@ -155,9 +313,8 @@ export function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="trade">Trades</SelectItem>
-                <SelectItem value="giveaway">Giveaways</SelectItem>
-                <SelectItem value="wishlist">Wishlists</SelectItem>
-                <SelectItem value="announcement">News</SelectItem>
+                <SelectItem value="forum">Forum</SelectItem>
+                <SelectItem value="event">Events</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -169,15 +326,15 @@ export function Dashboard() {
         <div className="flex items-center justify-center gap-8 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span>2,847 Active Traders</span>
+            <span>{stats.activeTraders.toLocaleString()} Active Traders</span>
           </div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-blue-500" />
-            <span>156 Active Trades</span>
+            <span>{stats.activeTrades} Active Trades</span>
           </div>
           <div className="flex items-center gap-2">
             <Gift className="w-4 h-4 text-purple-500" />
-            <span>12 Live Giveaways</span>
+            <span>{stats.liveEvents} Live Events</span>
           </div>
         </div>
       </div>
@@ -186,19 +343,14 @@ export function Dashboard() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           {filteredPosts.map((post) => (
-            <Card key={post.id} className={`relative ${post.pinned ? 'ring-2 ring-orange-500/20 bg-orange-50/30 dark:bg-orange-950/20' : ''}`}>
-              {post.pinned && (
-                <div className="absolute -top-2 left-4 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
-                  PINNED
-                </div>
-              )}
-              
+            <Card key={post.id} className="relative">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10">
-                      <AvatarImage src={post.user.avatar} />
-                      <AvatarFallback>{post.user.username[0]}</AvatarFallback>
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                        {post.user.username[0]?.toUpperCase()}
+                      </AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="flex items-center gap-2">
@@ -215,7 +367,7 @@ export function Dashboard() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>@{post.user.robloxUsername}</span>
+                        <span>@{post.user.robloxUsername || post.user.username}</span>
                         <span>•</span>
                         <div className="flex items-center gap-1">
                           <div className="flex">
@@ -272,47 +424,41 @@ export function Dashboard() {
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-sm text-muted-foreground">Looking for:</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {post.wantedItems?.map((item, i) => (
-                          <Badge key={i} variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                            {item}
-                          </Badge>
-                        ))}
+                    {post.wantedItems && (
+                      <div>
+                        <span className="text-sm text-muted-foreground">Looking for:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {post.wantedItems?.map((item, i) => (
+                            <Badge key={i} variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                              {item}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    {post.status && (
+                      <div>
+                        <span className="text-sm text-muted-foreground">Status:</span>
+                        <Badge variant="outline" className={`ml-1 ${
+                          post.status === 'open' ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' :
+                          post.status === 'completed' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                          'bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300'
+                        }`}>
+                          {post.status}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Wishlist Details */}
-                {post.type === 'wishlist' && (
-                  <div className="flex flex-wrap gap-4 p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <span className="text-sm text-muted-foreground">Wanted:</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {post.wantedItems?.map((item, i) => (
-                          <Badge key={i} variant="outline" className="bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
-                            {item}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-sm text-muted-foreground">Offering:</span>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 ml-1">
-                        {post.offering}
+                {/* Forum Details */}
+                {post.type === 'forum' && post.category && (
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Category:</span>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                        {post.category.replace('_', ' ').toUpperCase()}
                       </Badge>
-                    </div>
-                  </div>
-                )}
-
-                {/* Giveaway Details */}
-                {post.type === 'giveaway' && post.entries && (
-                  <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Giveaway Entries:</span>
-                      <Badge className="bg-green-500 text-white">{post.entries} entries</Badge>
                     </div>
                   </div>
                 )}
