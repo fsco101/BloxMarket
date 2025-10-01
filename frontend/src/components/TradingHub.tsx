@@ -21,7 +21,8 @@ import {
   Loader2,
   AlertCircle,
   Upload,
-  X
+  X,
+  Edit
 } from 'lucide-react';
 
 interface Trade {
@@ -35,6 +36,14 @@ interface Trade {
   roblox_username: string;
   credibility_score: number;
   images?: { image_url: string; uploaded_at: string }[];
+  user_id?: string;
+}
+
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  robloxUsername?: string;
 }
 
 interface ImageDisplayProps {
@@ -114,14 +123,24 @@ export function TradingHub() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [newTrade, setNewTrade] = useState({
+    itemOffered: '',
+    itemRequested: '',
+    description: ''
+  });
+
+  const [editTrade, setEditTrade] = useState({
     itemOffered: '',
     itemRequested: '',
     description: ''
@@ -130,6 +149,8 @@ export function TradingHub() {
   // Image upload states
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
+  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]);
 
   const loadTrades = useCallback(async () => {
     try {
@@ -155,6 +176,25 @@ export function TradingHub() {
       setLoading(false);
     }
   }, [currentPage, filterCategory]);
+
+  // Load current user
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        console.log('Loading current user...');
+        const user = await apiService.getCurrentUser();
+        console.log('Current user loaded:', user);
+        setCurrentUser(user);
+      } catch (err) {
+        console.error('Failed to load current user:', err);
+      }
+    };
+    
+    console.log('Auth check:', apiService.isAuthenticated());
+    if (apiService.isAuthenticated()) {
+      loadCurrentUser();
+    }
+  }, []);
 
   // Load trades from API
   useEffect(() => {
@@ -208,6 +248,46 @@ export function TradingHub() {
   const handleRemoveImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length + editSelectedImages.length > 5) {
+      setError('Maximum 5 images allowed');
+      return;
+    }
+
+    // Validate file types and sizes
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        setError('Only image files are allowed');
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be less than 5MB');
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setEditSelectedImages(prev => [...prev, ...validFiles]);
+      
+      // Create preview URLs
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setEditImagePreviewUrls(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveEditImage = (index: number) => {
+    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleCreateTrade = async (e: React.FormEvent) => {
@@ -275,6 +355,96 @@ export function TradingHub() {
     } finally {
       setCreateLoading(false);
     }
+  };
+
+  const handleEditTrade = (trade: Trade) => {
+    if (!currentUser || currentUser.id !== trade.user_id) {
+      toast.error('You can only edit your own trades');
+      return;
+    }
+    
+    setEditingTrade(trade);
+    setEditTrade({
+      itemOffered: trade.item_offered,
+      itemRequested: trade.item_requested || '',
+      description: trade.description || ''
+    });
+    setEditSelectedImages([]);
+    setEditImagePreviewUrls([]);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateTrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingTrade) return;
+    
+    // Validation
+    if (!editTrade.itemOffered.trim()) {
+      setError('Item offered is required');
+      return;
+    }
+    
+    try {
+      setEditLoading(true);
+      setError('');
+      
+      await apiService.updateTrade(editingTrade.trade_id, {
+        itemOffered: editTrade.itemOffered,
+        itemRequested: editTrade.itemRequested,
+        description: editTrade.description
+      }, editSelectedImages);
+      
+      // Reset form
+      setIsEditDialogOpen(false);
+      setEditingTrade(null);
+      setEditTrade({
+        itemOffered: '',
+        itemRequested: '',
+        description: ''
+      });
+      setEditSelectedImages([]);
+      setEditImagePreviewUrls([]);
+      
+      // Reload trades to show the updated one
+      await loadTrades();
+      
+      toast.success('Trade updated successfully! 🎉', {
+        description: 'Your trade has been updated and is now visible to other users.'
+      });
+    } catch (err) {
+      console.error('Failed to update trade:', err);
+      let errorMessage = 'Failed to update trade';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('413')) {
+          errorMessage = 'Images are too large. Please use smaller images (max 5MB each).';
+        } else if (err.message.includes('400')) {
+          errorMessage = 'Invalid data. Please check all fields and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to update trade', {
+        description: errorMessage
+      });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const canEditTrade = (trade: Trade) => {
+    console.log('canEditTrade check:', {
+      currentUser,
+      currentUserId: currentUser?.id,
+      tradeUserId: trade.user_id,
+      match: currentUser && currentUser.id === trade.user_id
+    });
+    return currentUser && currentUser.id === trade.user_id;
   };
 
   const filteredTrades = trades.filter((trade) => {
@@ -446,6 +616,168 @@ export function TradingHub() {
                       </>
                     ) : (
                       'Create Trade'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Edit Trade Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Trade</DialogTitle>
+                <DialogDescription>
+                  Update the details for your trade listing
+                </DialogDescription>
+              </DialogHeader>
+              
+              <form onSubmit={handleUpdateTrade} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-offered">What you're offering *</Label>
+                  <Input
+                    id="edit-item-offered"
+                    placeholder="Enter the item you're trading away"
+                    value={editTrade.itemOffered}
+                    onChange={(e) => setEditTrade(prev => ({ ...prev, itemOffered: e.target.value }))}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-requested">What you want (optional)</Label>
+                  <Input
+                    id="edit-item-requested"
+                    placeholder="Enter what you're looking for"
+                    value={editTrade.itemRequested}
+                    onChange={(e) => setEditTrade(prev => ({ ...prev, itemRequested: e.target.value }))}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-trade-description">Description (optional)</Label>
+                  <Textarea
+                    id="edit-trade-description"
+                    placeholder="Add additional details about your trade..."
+                    value={editTrade.description}
+                    onChange={(e) => setEditTrade(prev => ({ ...prev, description: e.target.value }))}
+                    className="min-h-[100px]"
+                  />
+                </div>
+
+                {/* Image Upload Section */}
+                <div className="space-y-2">
+                  <Label>Images (optional - up to 5 images)</Label>
+                  <div 
+                    className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-colors"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                      const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+                      if (files.length > 0) {
+                        const input = document.getElementById('edit-image-upload') as HTMLInputElement;
+                        const dt = new DataTransfer();
+                        files.forEach(file => dt.items.add(file));
+                        input.files = dt.files;
+                        handleEditImageSelect({ target: input } as React.ChangeEvent<HTMLInputElement>);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleEditImageSelect}
+                      className="hidden"
+                      id="edit-image-upload"
+                      disabled={editSelectedImages.length >= 5}
+                    />
+                    <label
+                      htmlFor="edit-image-upload"
+                      className={`cursor-pointer flex flex-col items-center gap-2 ${
+                        editSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">
+                        {editSelectedImages.length >= 5 
+                          ? 'Maximum 5 images reached' 
+                          : 'Click to upload images or drag and drop'
+                        }
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        PNG, JPG, GIF up to 5MB each • {editSelectedImages.length}/5 selected
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Image Previews */}
+                  {editImagePreviewUrls.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                          {editImagePreviewUrls.length} image{editImagePreviewUrls.length !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {editImagePreviewUrls.map((url, index) => (
+                          <div key={index} className="relative group">
+                            <div className="aspect-square border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                              <ImageDisplay
+                                src={url}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-full"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEditImage(index)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {error && (
+                  <div className="text-red-500 text-sm">{error}</div>
+                )}
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsEditDialogOpen(false)} 
+                    disabled={editLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" 
+                    disabled={editLoading}
+                  >
+                    {editLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update Trade'
                     )}
                   </Button>
                 </div>
@@ -629,13 +961,33 @@ export function TradingHub() {
 
                     {/* Actions */}
                     <div className="flex gap-2 pt-2">
-                      <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
-                        <MessageSquare className="w-3 h-3 mr-1" />
-                        Contact
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
-                        View Details
-                      </Button>
+                      {canEditTrade(trade) ? (
+                        <>
+                          <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                            <MessageSquare className="w-3 h-3 mr-1" />
+                            Contact
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1"
+                            onClick={() => handleEditTrade(trade)}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                            <MessageSquare className="w-3 h-3 mr-1" />
+                            Contact
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1">
+                            View Details
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

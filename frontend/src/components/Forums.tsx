@@ -25,9 +25,32 @@ import {
   AlertCircle,
   Upload,
   X,
-  ImageIcon
+  ImageIcon,
+  Edit
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  robloxUsername?: string;
+}
+
+interface ForumPost {
+  post_id: string;
+  title: string;
+  content: string;
+  category: string;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+  username: string;
+  credibility_score: number;
+  user_id: string;
+  images?: { filename: string; originalName?: string }[];
+  commentCount: number;
+}
 
 export function Forums() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,10 +60,20 @@ export function Forums() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<any>(null);
   const [createLoading, setCreateLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   const [newPost, setNewPost] = useState({
+    title: '',
+    content: '',
+    category: 'general'
+  });
+
+  const [editPost, setEditPost] = useState({
     title: '',
     content: '',
     category: 'general'
@@ -49,6 +82,8 @@ export function Forums() {
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
+  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]);
 
   // Enhanced Image Display Component with retry functionality
   interface ImageDisplayProps {
@@ -161,6 +196,59 @@ export function Forums() {
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const remainingSlots = 5 - editSelectedImages.length;
+    const filesToAdd = files.slice(0, remainingSlots);
+    
+    // Validate file types and sizes
+    const validFiles = filesToAdd.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} is not an image file`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error(`${file.name} is too large (max 5MB)`);
+        return false;
+      }
+      return true;
+    });
+    
+    if (validFiles.length > 0) {
+      setEditSelectedImages(prev => [...prev, ...validFiles]);
+      
+      // Create preview URLs
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setEditImagePreviewUrls(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveEditImage = (index: number) => {
+    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Load current user
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const user = await apiService.getCurrentUser();
+        setCurrentUser(user);
+      } catch (err) {
+        console.error('Failed to load current user:', err);
+      }
+    };
+    
+    if (apiService.isAuthenticated()) {
+      loadCurrentUser();
+    }
+  }, []);
+
   // Load posts from API
   useEffect(() => {
     loadPosts();
@@ -170,7 +258,7 @@ export function Forums() {
     try {
       setLoading(true);
       setError('');
-      const params: Record<string, any> = {
+      const params: Record<string, string | number> = {
         page: currentPage,
         limit: 10
       };
@@ -181,8 +269,8 @@ export function Forums() {
       
       const response = await apiService.getForumPosts(params);
       setPosts(response || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load posts');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load posts');
     } finally {
       setLoading(false);
     }
@@ -229,7 +317,7 @@ export function Forums() {
       toast.success('Post created successfully! 🎉', {
         description: 'Your post has been published and is now visible to the community.'
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create forum post:', err);
       let errorMessage = 'Failed to create post';
       
@@ -251,6 +339,91 @@ export function Forums() {
     }
   };
 
+  const handleEditPost = (post: ForumPost) => {
+    if (!currentUser || currentUser.id !== post.user_id) {
+      toast.error('You can only edit your own posts');
+      return;
+    }
+    
+    setEditingPost(post);
+    setEditPost({
+      title: post.title,
+      content: post.content,
+      category: post.category
+    });
+    setEditSelectedImages([]);
+    setEditImagePreviewUrls([]);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingPost) return;
+    
+    // Validation
+    if (!editPost.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    if (!editPost.content.trim()) {
+      setError('Content is required');
+      return;
+    }
+    
+    try {
+      setEditLoading(true);
+      setError('');
+      
+      await apiService.updateForumPost(editingPost.post_id, {
+        title: editPost.title,
+        content: editPost.content,
+        category: editPost.category
+      }, editSelectedImages);
+      
+      // Reset form
+      setIsEditDialogOpen(false);
+      setEditingPost(null);
+      setEditPost({
+        title: '',
+        content: '',
+        category: 'general'
+      });
+      setEditSelectedImages([]);
+      setEditImagePreviewUrls([]);
+      
+      // Reload posts to show the updated one
+      await loadPosts();
+      
+      toast.success('Post updated successfully! 🎉', {
+        description: 'Your post has been updated and is now visible to the community.'
+      });
+    } catch (err: unknown) {
+      console.error('Failed to update forum post:', err);
+      let errorMessage = 'Failed to update post';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('413')) {
+          errorMessage = 'Images are too large. Please use smaller images (max 5MB each).';
+        } else if (err.message.includes('400')) {
+          errorMessage = 'Invalid data. Please check all fields and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const canEditPost = (post: ForumPost) => {
+    return currentUser && currentUser.id === post.user_id;
+  };
+
 
 
   const categories = [
@@ -270,14 +443,14 @@ export function Forums() {
     }
   };
 
-  const filteredPosts = posts.filter((post: any) => {
+  const filteredPosts = posts.filter((post: ForumPost) => {
     const matchesSearch = searchTerm === '' || 
       post.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       post.content?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
-  const sortedPosts = [...filteredPosts].sort((a: any, b: any) => {
+  const sortedPosts = [...filteredPosts].sort((a: ForumPost, b: ForumPost) => {
     switch (sortBy) {
       case 'activity':
       case 'newest':
@@ -466,6 +639,175 @@ export function Forums() {
               </form>
             </DialogContent>
           </Dialog>
+          
+          {/* Edit Post Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Post</DialogTitle>
+                <DialogDescription>
+                  Update your post content
+                </DialogDescription>
+              </DialogHeader>
+              
+              <form onSubmit={handleUpdatePost} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-post-title">Title *</Label>
+                  <Input
+                    id="edit-post-title"
+                    placeholder="Enter your post title"
+                    value={editPost.title}
+                    onChange={(e) => setEditPost(prev => ({ ...prev, title: e.target.value }))}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-post-content">Content *</Label>
+                  <Textarea
+                    id="edit-post-content"
+                    placeholder="Write your post content..."
+                    value={editPost.content}
+                    onChange={(e) => setEditPost(prev => ({ ...prev, content: e.target.value }))}
+                    className="min-h-[150px]"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-post-category">Category</Label>
+                  <Select value={editPost.category} onValueChange={(value) => setEditPost(prev => ({ ...prev, category: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(cat => cat.value !== 'all').map(category => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Image Upload Section */}
+                <div className="space-y-2">
+                  <Label>Images (optional - up to 5 images)</Label>
+                  <div 
+                    className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-colors"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                      const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+                      if (files.length > 0) {
+                        const input = document.getElementById('edit-forum-image-upload') as HTMLInputElement;
+                        const dt = new DataTransfer();
+                        files.forEach(file => dt.items.add(file));
+                        input.files = dt.files;
+                        handleEditImageSelect({ target: input } as React.ChangeEvent<HTMLInputElement>);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleEditImageSelect}
+                      className="hidden"
+                      id="edit-forum-image-upload"
+                      disabled={editSelectedImages.length >= 5}
+                    />
+                    <label
+                      htmlFor="edit-forum-image-upload"
+                      className={`cursor-pointer flex flex-col items-center gap-2 ${
+                        editSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">
+                        {editSelectedImages.length >= 5 
+                          ? 'Maximum 5 images reached' 
+                          : 'Click to upload images or drag and drop'
+                        }
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        PNG, JPG, GIF up to 5MB each • {editSelectedImages.length}/5 selected
+                      </span>
+                    </label>
+                  </div>
+                  
+                  {/* Image Previews */}
+                  {editImagePreviewUrls.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                          {editImagePreviewUrls.length} image{editImagePreviewUrls.length !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {editImagePreviewUrls.map((url, index) => (
+                          <div key={index} className="relative group">
+                            <div className="aspect-square border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                              <ImageDisplay
+                                src={url}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-full"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEditImage(index)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {error && (
+                  <div className="text-red-500 text-sm">{error}</div>
+                )}
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsEditDialogOpen(false)} 
+                    disabled={editLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white" 
+                    disabled={editLoading}
+                  >
+                    {editLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update Post'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -546,7 +888,7 @@ export function Forums() {
             </div>
           )}
           
-          {!loading && !error && sortedPosts.map((post: any) => (
+          {!loading && !error && sortedPosts.map((post: ForumPost) => (
             <Card key={post.post_id} className="hover:shadow-lg transition-all duration-200 cursor-pointer">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -641,9 +983,25 @@ export function Forums() {
                       </Button>
                     </div>
                     
-                    <Button size="sm" variant="outline">
-                      Reply
-                    </Button>
+                    {canEditPost(post) ? (
+                      <>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleEditPost(post)}
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          Reply
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline">
+                        Reply
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

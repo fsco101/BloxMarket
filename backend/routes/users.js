@@ -47,6 +47,57 @@ const upload = multer({
   }
 });
 
+// Get current user profile (protected) - MUST be before /:userId route
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const user = await User.findById(userId).select('-password_hash');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get user stats
+    const totalTrades = await Trade.countDocuments({ user_id: userId });
+    const totalWishlistItems = await Wishlist.countDocuments({ user_id: userId });
+    
+    const vouchStats = await Vouch.aggregate([
+      { $match: { vouched_user_id: new mongoose.Types.ObjectId(userId) } },
+      {
+        $group: {
+          _id: null,
+          totalVouches: { $sum: 1 },
+          averageRating: { $avg: '$rating' }
+        }
+      }
+    ]);
+
+    const stats = vouchStats[0] || { totalVouches: 0, averageRating: 0 };
+
+    res.json({
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      robloxUsername: user.roblox_username,
+      credibilityScore: user.credibility_score,
+      role: user.role,
+      avatarUrl: user.avatar_url,
+      bio: user.bio,
+      discordUsername: user.discord_username,
+      timezone: user.timezone,
+      createdAt: user.createdAt,
+      totalTrades,
+      totalWishlistItems,
+      totalVouches: stats.totalVouches,
+      averageRating: stats.averageRating ? parseFloat(stats.averageRating.toFixed(1)) : 0
+    });
+
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({ error: 'Failed to get user profile' });
+  }
+});
+
 // Get user profile
 router.get('/:userId', async (req, res) => {
   try {
@@ -220,55 +271,7 @@ router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, r
   }
 });
 
-// Get current user profile (protected)
-router.get('/me', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    
-    const user = await User.findById(userId).select('-password_hash');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Get user stats
-    const totalTrades = await Trade.countDocuments({ user_id: userId });
-    const totalWishlistItems = await Wishlist.countDocuments({ user_id: userId });
-    
-    const vouchStats = await Vouch.aggregate([
-      { $match: { vouched_user_id: new mongoose.Types.ObjectId(userId) } },
-      {
-        $group: {
-          _id: null,
-          totalVouches: { $sum: 1 },
-          averageRating: { $avg: '$rating' }
-        }
-      }
-    ]);
-
-    const stats = vouchStats[0] || { totalVouches: 0, averageRating: 0 };
-
-    res.json({
-      _id: user._id,
-      username: user.username,
-      roblox_username: user.roblox_username,
-      credibility_score: user.credibility_score,
-      role: user.role,
-      avatar_url: user.avatar_url,
-      bio: user.bio,
-      discord_username: user.discord_username,
-      timezone: user.timezone,
-      createdAt: user.createdAt,
-      totalTrades,
-      totalWishlistItems,
-      totalVouches: stats.totalVouches,
-      averageRating: stats.averageRating ? parseFloat(stats.averageRating.toFixed(1)) : 0
-    });
-
-  } catch (error) {
-    console.error('Get current user error:', error);
-    res.status(500).json({ error: 'Failed to get user profile' });
-  }
-});
+// Get user's wishlist
 
 // Get user's wishlist
 router.get('/:userId/wishlist', async (req, res) => {

@@ -5,6 +5,8 @@ class ApiService {
 
   constructor() {
     this.token = localStorage.getItem('bloxmarket-token');
+    // Add debug logging
+    console.log('ApiService initialized with token:', this.token ? 'present' : 'missing');
   }
 
   async request(endpoint: string, options: RequestInit = {}) {
@@ -82,6 +84,20 @@ class ApiService {
     return data;
   }
 
+  async logout() {
+    await this.request('/auth/logout', {
+      method: 'POST',
+    });
+    this.clearToken();
+  }
+
+  async logoutAll() {
+    await this.request('/auth/logout-all', {
+      method: 'POST',
+    });
+    this.clearToken();
+  }
+
   // Note: User methods are defined at the end of the class
 
   // Trade methods
@@ -143,8 +159,35 @@ class ApiService {
   }
 
   async deleteTradeImage(filename: string) {
-    return this.request(`/trades/images/${filename}`, {
+    return this.request(`/trades/${filename}`, {
       method: 'DELETE',
+    });
+  }
+
+  async updateTrade(tradeId: string, tradeData: {
+    itemOffered: string;
+    itemRequested?: string;
+    description?: string;
+  }, images?: File[]) {
+    const formData = new FormData();
+    formData.append('itemOffered', tradeData.itemOffered);
+    if (tradeData.itemRequested) formData.append('itemRequested', tradeData.itemRequested);
+    if (tradeData.description) formData.append('description', tradeData.description);
+    
+    // Add images to FormData
+    if (images && images.length > 0) {
+      images.forEach((image) => {
+        formData.append('images', image);
+      });
+    }
+
+    return this.request(`/trades/${tradeId}`, {
+      method: 'PUT',
+      body: formData,
+      headers: {
+        // Remove Content-Type header to let browser set it with boundary for FormData
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      },
     });
   }
 
@@ -207,6 +250,38 @@ class ApiService {
       // No images, use regular JSON request
       return this.request('/forum/posts', {
         method: 'POST',
+        body: JSON.stringify(postData),
+      });
+    }
+  }
+
+  async updateForumPost(postId: string, postData: {
+    title: string;
+    content: string;
+    category?: string;
+  }, images?: File[]) {
+    if (images && images.length > 0) {
+      // Create FormData for image uploads
+      const formData = new FormData();
+      formData.append('title', postData.title);
+      formData.append('content', postData.content);
+      if (postData.category) {
+        formData.append('category', postData.category);
+      }
+      
+      // Add images to FormData
+      images.forEach((image) => {
+        formData.append('images', image);
+      });
+      
+      return this.request(`/forum/posts/${postId}`, {
+        method: 'PUT',
+        body: formData,
+      });
+    } else {
+      // No images, use regular JSON request
+      return this.request(`/forum/posts/${postId}`, {
+        method: 'PUT',
         body: JSON.stringify(postData),
       });
     }

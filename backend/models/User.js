@@ -52,7 +52,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: 50
-  }
+  },
+  tokens: [{
+    token: {
+      type: String,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      expires: 86400 // Token expires in 24 hours (in seconds)
+    }
+  }]
 }, {
   timestamps: true
 });

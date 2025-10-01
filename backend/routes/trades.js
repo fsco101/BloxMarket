@@ -152,6 +152,7 @@ router.get('/', async (req, res) => {
         username: trade.user_id.username,
         roblox_username: trade.user_id.roblox_username,
         credibility_score: trade.user_id.credibility_score,
+        user_id: trade.user_id._id,
         images: trade.images || []
       })),
       pagination: {
@@ -264,6 +265,99 @@ router.post('/', authenticateToken, upload.array('images', 5), async (req, res) 
     }
     
     res.status(500).json({ error: 'Failed to create trade' });
+  }
+});
+
+// Update trade (protected)
+router.put('/:tradeId', authenticateToken, upload.array('images', 5), async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const { itemOffered, itemRequested, description } = req.body;
+    const userId = req.user.userId;
+    const uploadedFiles = req.files;
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    if (!itemOffered) {
+      return res.status(400).json({ error: 'Item offered is required' });
+    }
+
+    // Check if user owns the trade
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    if (!trade.user_id.equals(userId)) {
+      return res.status(403).json({ error: 'Not authorized to update this trade' });
+    }
+
+    // Process uploaded images if any
+    const newImages = [];
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      for (const file of uploadedFiles) {
+        newImages.push({
+          image_url: `/api/trades/images/${file.filename}`,
+          uploaded_at: new Date()
+        });
+      }
+    }
+
+    // Update trade data
+    const updateData = {
+      item_offered: itemOffered,
+      item_requested: itemRequested || undefined,
+      description: description || undefined,
+      updatedAt: new Date()
+    };
+
+    // If new images are uploaded, replace the existing ones
+    if (newImages.length > 0) {
+      // Delete old images from filesystem
+      if (trade.images && trade.images.length > 0) {
+        trade.images.forEach(image => {
+          const filename = path.basename(image.image_url);
+          const filePath = path.join(uploadsDir, filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlink(filePath, (err) => {
+              if (err) console.error('Error deleting old image:', err);
+            });
+          }
+        });
+      }
+      updateData.images = newImages;
+    }
+
+    await Trade.findByIdAndUpdate(tradeId, updateData);
+
+    res.json({ 
+      message: 'Trade updated successfully',
+      imagesUploaded: newImages.length
+    });
+
+  } catch (error) {
+    console.error('Update trade error:', error);
+    
+    // Clean up uploaded files if trade update fails
+    if (req.files) {
+      req.files.forEach(file => {
+        fs.unlink(file.path, (err) => {
+          if (err) console.error('Error deleting file:', err);
+        });
+      });
+    }
+    
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size too large. Maximum 5MB per file.' });
+      } else if (error.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ error: 'Too many files. Maximum 5 images allowed.' });
+      }
+    }
+    
+    res.status(500).json({ error: 'Failed to update trade' });
   }
 });
 

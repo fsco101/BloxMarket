@@ -73,6 +73,7 @@ router.get('/posts', async (req, res) => {
           created_at: post.createdAt,
           username: post.user_id.username,
           credibility_score: post.user_id.credibility_score,
+          user_id: post.user_id._id,
           images: post.images || [],
           commentCount
         };
@@ -221,6 +222,130 @@ router.post('/posts', authenticateToken, upload.array('images', 5), async (req, 
     }
     
     res.status(500).json({ error: 'Failed to create forum post' });
+  }
+});
+
+// Update forum post (protected)
+router.put('/posts/:postId', authenticateToken, upload.array('images', 5), async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { title, content, category } = req.body;
+    const userId = req.user.userId;
+    const uploadedFiles = req.files;
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ error: 'Invalid post ID' });
+    }
+
+    if (!title || !content) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+      return res.status(400).json({ error: 'Title and content are required' });
+    }
+
+    // Check if user owns the post
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    if (!post.user_id.equals(userId)) {
+      // Clean up uploaded files if not authorized
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+      return res.status(403).json({ error: 'Not authorized to update this post' });
+    }
+
+    const validCategories = ['trading_tips', 'scammer_reports', 'game_updates', 'general'];
+    if (category && !validCategories.includes(category)) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+
+    // Update post data
+    const updateData = {
+      title,
+      content,
+      category: category || 'general',
+      updatedAt: new Date()
+    };
+
+    // Process uploaded images if any
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      const newImages = [];
+      uploadedFiles.forEach(file => {
+        newImages.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.path,
+          size: file.size,
+          mimetype: file.mimetype
+        });
+      });
+
+      // Delete old images from filesystem
+      if (post.images && post.images.length > 0) {
+        post.images.forEach(image => {
+          const filePath = path.join('./uploads/forum', image.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlink(filePath, (err) => {
+              if (err) console.error('Error deleting old image:', err);
+            });
+          }
+        });
+      }
+
+      updateData.images = newImages;
+    }
+
+    await ForumPost.findByIdAndUpdate(postId, updateData);
+
+    res.json({ 
+      message: 'Post updated successfully',
+      imagesUploaded: uploadedFiles ? uploadedFiles.length : 0
+    });
+
+  } catch (error) {
+    console.error('Update forum post error:', error);
+    
+    // Clean up uploaded files on error
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({ error: 'Too many files. Maximum 5 images per post.' });
+    }
+    if (error.message === 'Only image files are allowed') {
+      return res.status(400).json({ error: 'Only image files are allowed' });
+    }
+    
+    res.status(500).json({ error: 'Failed to update forum post' });
   }
 });
 
