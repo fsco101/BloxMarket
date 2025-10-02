@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
+import { useAuth } from '../App';
 import { 
   Shield, 
   Users, 
@@ -24,8 +25,34 @@ import {
 } from 'lucide-react';
 
 export function AdminPanel() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Check if user is admin or moderator
+  const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
+
+  // If user is not admin or moderator, show access denied
+  if (!isAdminOrModerator) {
+    return (
+      <div className="flex-1 overflow-hidden">
+        <div className="min-h-full flex items-center justify-center bg-background">
+          <Card className="max-w-md mx-auto">
+            <CardContent className="p-8 text-center">
+              <Shield className="w-16 h-16 mx-auto mb-4 text-red-500" />
+              <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+              <p className="text-muted-foreground mb-4">
+                You need administrator or moderator privileges to access this page.
+              </p>
+              <Button variant="outline" onClick={() => window.history.back()}>
+                Go Back
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // Mock admin data
   const adminStats = {

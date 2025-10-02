@@ -10,6 +10,7 @@ import { Progress } from './ui/progress';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { apiService } from '../services/api';
+import { useAuth } from '../App';
 import { 
   Gift, 
   Calendar, 
@@ -19,7 +20,10 @@ import {
   Heart,
   MessageSquare,
   Loader2,
-  Plus
+  Plus,
+  Shield,
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 interface Event {
@@ -27,7 +31,7 @@ interface Event {
   title: string;
   description: string;
   type: 'giveaway' | 'competition' | 'event';
-  status: 'active' | 'ended' | 'upcoming';
+  status: 'active' | 'ended' | 'upcoming' | 'ending-soon';
   prizes?: string[];
   requirements?: string[];
   maxParticipants?: number;
@@ -39,9 +43,16 @@ interface Event {
     avatar?: string;
     verified?: boolean;
   };
+  participants?: Array<{
+    _id: string;
+    username: string;
+    avatar?: string;
+  }>;
+  createdAt: string;
 }
 
 export function EventsGiveaways() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [events, setEvents] = useState<Event[]>([]);
@@ -49,13 +60,25 @@ export function EventsGiveaways() {
   const [error, setError] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+  const [joinLoading, setJoinLoading] = useState<string | null>(null);
+  
+  // Check if user is admin or moderator
+  const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
   
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
+    type: 'event',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    prizes: [] as string[],
+    requirements: [] as string[],
+    maxParticipants: undefined as number | undefined
   });
+
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   // Load events from API
   useEffect(() => {
@@ -84,22 +107,122 @@ export function EventsGiveaways() {
       await apiService.createEvent({
         title: newEvent.title,
         description: newEvent.description,
+        type: newEvent.type as 'giveaway' | 'competition' | 'event',
         startDate: newEvent.startDate,
-        endDate: newEvent.endDate
+        endDate: newEvent.endDate,
+        prizes: newEvent.prizes.filter(p => p.trim()),
+        requirements: newEvent.requirements.filter(r => r.trim()),
+        maxParticipants: newEvent.maxParticipants
       });
       
       setIsCreateDialogOpen(false);
       setNewEvent({
         title: '',
         description: '',
+        type: 'event',
         startDate: '',
-        endDate: ''
+        endDate: '',
+        prizes: [],
+        requirements: [],
+        maxParticipants: undefined
       });
       
       // Reload events to show the new one
       await loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create event');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleJoinEvent = async (eventId: string, eventType: string) => {
+    try {
+      setJoinLoading(eventId);
+      setError('');
+      
+      await apiService.joinEvent(eventId);
+      
+      // Reload events to update participant count
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to join ${eventType}`);
+    } finally {
+      setJoinLoading(null);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string, eventTitle: string) => {
+    if (!confirm(`Are you sure you want to delete the event "${eventTitle}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeleteLoading(eventId);
+      setError('');
+      
+      await apiService.deleteEvent(eventId);
+      
+      // Reload events to remove the deleted event
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete event');
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    setEditingEvent(event);
+    setNewEvent({
+      title: event.title,
+      description: event.description,
+      type: event.type,
+      startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : '',
+      endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+      prizes: event.prizes || [],
+      requirements: event.requirements || [],
+      maxParticipants: event.maxParticipants
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvent) return;
+
+    try {
+      setCreateLoading(true);
+      setError('');
+      
+      await apiService.updateEvent(editingEvent._id, {
+        title: newEvent.title,
+        description: newEvent.description,
+        type: newEvent.type as 'giveaway' | 'competition' | 'event',
+        startDate: newEvent.startDate,
+        endDate: newEvent.endDate,
+        prizes: newEvent.prizes.filter(p => p.trim()),
+        requirements: newEvent.requirements.filter(r => r.trim()),
+        maxParticipants: newEvent.maxParticipants
+      });
+      
+      setIsEditDialogOpen(false);
+      setEditingEvent(null);
+      setNewEvent({
+        title: '',
+        description: '',
+        type: 'event',
+        startDate: '',
+        endDate: '',
+        prizes: [],
+        requirements: [],
+        maxParticipants: undefined
+      });
+      
+      // Reload events to show the updated one
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update event');
     } finally {
       setCreateLoading(false);
     }
@@ -117,6 +240,16 @@ export function EventsGiveaways() {
     }
   };
 
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'active': return 'Active';
+      case 'ending-soon': return 'Ending Soon';
+      case 'upcoming': return 'Upcoming';
+      case 'ended': return 'Ended';
+      default: return status;
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'giveaway': return <Gift className="w-5 h-5" />;
@@ -130,7 +263,10 @@ export function EventsGiveaways() {
     const matchesSearch = searchTerm === '' || 
       event.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    
+    const matchesType = filterType === 'all' || event.type === filterType;
+    
+    return matchesSearch && matchesType;
   });
 
   return (
@@ -151,13 +287,14 @@ export function EventsGiveaways() {
               <Calendar className="w-4 h-4 mr-2" />
               Event Calendar
             </Button>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Event
-                </Button>
-              </DialogTrigger>
+            {isAdminOrModerator && (
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Create New Event</DialogTitle>
@@ -176,6 +313,20 @@ export function EventsGiveaways() {
                       onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
                       required
                     />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="event-type">Type</Label>
+                    <Select value={newEvent.type} onValueChange={(value) => setNewEvent(prev => ({ ...prev, type: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="event">Community Event</SelectItem>
+                        <SelectItem value="giveaway">Giveaway</SelectItem>
+                        <SelectItem value="competition">Competition</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   
                   <div className="space-y-2">
@@ -211,6 +362,49 @@ export function EventsGiveaways() {
                     </div>
                   </div>
                   
+                  <div className="space-y-2">
+                    <Label htmlFor="max-participants">Max Participants (optional)</Label>
+                    <Input
+                      id="max-participants"
+                      type="number"
+                      placeholder="No limit"
+                      value={newEvent.maxParticipants || ''}
+                      onChange={(e) => setNewEvent(prev => ({ 
+                        ...prev, 
+                        maxParticipants: e.target.value ? parseInt(e.target.value) : undefined 
+                      }))}
+                      min="1"
+                    />
+                  </div>
+                  
+                  {(newEvent.type === 'giveaway' || newEvent.type === 'competition') && (
+                    <div className="space-y-2">
+                      <Label htmlFor="prizes">Prizes (comma-separated)</Label>
+                      <Input
+                        id="prizes"
+                        placeholder="e.g., 1000 Robux, Limited Item, etc."
+                        value={newEvent.prizes.join(', ')}
+                        onChange={(e) => setNewEvent(prev => ({ 
+                          ...prev, 
+                          prizes: e.target.value.split(',').map(p => p.trim()).filter(p => p) 
+                        }))}
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="requirements">Requirements (comma-separated, optional)</Label>
+                    <Input
+                      id="requirements"
+                      placeholder="e.g., Follow on Twitter, Join Discord, etc."
+                      value={newEvent.requirements.join(', ')}
+                      onChange={(e) => setNewEvent(prev => ({ 
+                        ...prev, 
+                        requirements: e.target.value.split(',').map(r => r.trim()).filter(r => r) 
+                      }))}
+                    />
+                  </div>
+                  
                   {error && (
                     <div className="text-red-500 text-sm">{error}</div>
                   )}
@@ -232,7 +426,145 @@ export function EventsGiveaways() {
                   </div>
                 </form>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            )}
+
+            {/* Edit Event Dialog */}
+            {editingEvent && (
+              <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Edit Event</DialogTitle>
+                    <DialogDescription>
+                      Update the event details
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <form onSubmit={handleUpdateEvent} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-event-title">Title *</Label>
+                      <Input
+                        id="edit-event-title"
+                        placeholder="Enter event title"
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-event-type">Type</Label>
+                      <Select value={newEvent.type} onValueChange={(value) => setNewEvent(prev => ({ ...prev, type: value }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="event">Community Event</SelectItem>
+                          <SelectItem value="giveaway">Giveaway</SelectItem>
+                          <SelectItem value="competition">Competition</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-event-description">Description</Label>
+                      <Textarea
+                        id="edit-event-description"
+                        placeholder="Describe your event..."
+                        value={newEvent.description}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, description: e.target.value }))}
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-start-date">Start Date</Label>
+                        <Input
+                          id="edit-start-date"
+                          type="datetime-local"
+                          value={newEvent.startDate}
+                          onChange={(e) => setNewEvent(prev => ({ ...prev, startDate: e.target.value }))}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-end-date">End Date</Label>
+                        <Input
+                          id="edit-end-date"
+                          type="datetime-local"
+                          value={newEvent.endDate}
+                          onChange={(e) => setNewEvent(prev => ({ ...prev, endDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-max-participants">Max Participants (optional)</Label>
+                      <Input
+                        id="edit-max-participants"
+                        type="number"
+                        placeholder="No limit"
+                        value={newEvent.maxParticipants || ''}
+                        onChange={(e) => setNewEvent(prev => ({ 
+                          ...prev, 
+                          maxParticipants: e.target.value ? parseInt(e.target.value) : undefined 
+                        }))}
+                        min="1"
+                      />
+                    </div>
+                    
+                    {(newEvent.type === 'giveaway' || newEvent.type === 'competition') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-prizes">Prizes (comma-separated)</Label>
+                        <Input
+                          id="edit-prizes"
+                          placeholder="e.g., 1000 Robux, Limited Item, etc."
+                          value={newEvent.prizes.join(', ')}
+                          onChange={(e) => setNewEvent(prev => ({ 
+                            ...prev, 
+                            prizes: e.target.value.split(',').map(p => p.trim()).filter(p => p) 
+                          }))}
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-requirements">Requirements (comma-separated, optional)</Label>
+                      <Input
+                        id="edit-requirements"
+                        placeholder="e.g., Follow on Twitter, Join Discord, etc."
+                        value={newEvent.requirements.join(', ')}
+                        onChange={(e) => setNewEvent(prev => ({ 
+                          ...prev, 
+                          requirements: e.target.value.split(',').map(r => r.trim()).filter(r => r) 
+                        }))}
+                      />
+                    </div>
+                    
+                    {error && (
+                      <div className="text-red-500 text-sm">{error}</div>
+                    )}
+                    
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={createLoading}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white" disabled={createLoading}>
+                        {createLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          'Update Event'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
       </div>
@@ -271,6 +603,12 @@ export function EventsGiveaways() {
             <Gift className="w-4 h-4 text-green-500" />
             <span>{filteredEvents.length} Events Found</span>
           </div>
+          {!isAdminOrModerator && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Shield className="w-4 h-4 text-blue-500" />
+              <span>Event creation restricted to staff members</span>
+            </div>
+          )}
           {loading && (
             <div className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
@@ -286,8 +624,6 @@ export function EventsGiveaways() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredEvents.map((event) => (
               <Card key={event._id} className="hover:shadow-lg transition-all duration-200">
-
-                
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
@@ -304,16 +640,13 @@ export function EventsGiveaways() {
                               ✓
                             </Badge>
                           )}
-
                         </div>
-                        
-
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
                       <Badge className={getStatusColor(event.status)}>
-                        {event.status}
+                        {getStatusText(event.status)}
                       </Badge>
                       <Badge variant="outline" className="capitalize">
                         {getTypeIcon(event.type)}
@@ -324,8 +657,6 @@ export function EventsGiveaways() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-
-                  
                   <div>
                     <h3 className="font-semibold text-lg mb-2">{event.title}</h3>
                     <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
@@ -380,13 +711,32 @@ export function EventsGiveaways() {
                         <Clock className="w-4 h-4 text-blue-500" />
                         <span>Ends: {new Date(event.endDate).toLocaleDateString()}</span>
                       </div>
+                      {event.startDate && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4 text-green-500" />
+                          <span>Started: {new Date(event.startDate).toLocaleDateString()}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex gap-2 pt-2">
-                    <Button size="sm" className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white">
-                      {event.type === 'giveaway' ? 'Enter Giveaway' : event.type === 'competition' ? 'Join Competition' : 'RSVP'}
+                    <Button 
+                      size="sm" 
+                      className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                      onClick={() => handleJoinEvent(event._id, event.type)}
+                      disabled={joinLoading === event._id || event.status === 'ended'}
+                    >
+                      {joinLoading === event._id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Joining...
+                        </>
+                      ) : (
+                        event.type === 'giveaway' ? 'Enter Giveaway' : 
+                        event.type === 'competition' ? 'Join Competition' : 'RSVP'
+                      )}
                     </Button>
                     <Button variant="outline" size="sm">
                       <Heart className="w-3 h-3 mr-1" />
@@ -395,6 +745,33 @@ export function EventsGiveaways() {
                     <Button variant="outline" size="sm">
                       <MessageSquare className="w-3 h-3" />
                     </Button>
+                    
+                    {/* Admin/Moderator actions */}
+                    {isAdminOrModerator && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-blue-600 hover:text-blue-700"
+                          onClick={() => handleEditEvent(event)}
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteEvent(event._id, event.title)}
+                          disabled={deleteLoading === event._id}
+                        >
+                          {deleteLoading === event._id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>

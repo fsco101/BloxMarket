@@ -314,6 +314,10 @@ class ApiService {
     description?: string;
     startDate?: string;
     endDate?: string;
+    type?: string;
+    prizes?: string[];
+    requirements?: string[];
+    maxParticipants?: number;
   }) {
     return this.request('/events', {
       method: 'POST',
@@ -326,6 +330,10 @@ class ApiService {
     description?: string;
     startDate?: string;
     endDate?: string;
+    type?: string;
+    prizes?: string[];
+    requirements?: string[];
+    maxParticipants?: number;
   }) {
     return this.request(`/events/${eventId}`, {
       method: 'PUT',
@@ -336,6 +344,18 @@ class ApiService {
   async deleteEvent(eventId: string) {
     return this.request(`/events/${eventId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async joinEvent(eventId: string) {
+    return this.request(`/events/${eventId}/join`, {
+      method: 'POST',
+    });
+  }
+
+  async leaveEvent(eventId: string) {
+    return this.request(`/events/${eventId}/leave`, {
+      method: 'POST',
     });
   }
 

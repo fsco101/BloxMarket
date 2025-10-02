@@ -52,13 +52,19 @@ interface ForumPost {
 }
 
 interface Event {
-  event_id: string;
+  _id: string;
   title: string;
   description: string;
-  start_date?: string;
-  end_date?: string;
-  created_at: string;
-  created_by_username: string;
+  type: 'giveaway' | 'competition' | 'event';
+  status: 'active' | 'ended' | 'upcoming' | 'ending-soon';
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+  creator?: {
+    username: string;
+    avatar?: string;
+    verified?: boolean;
+  };
 }
 
 interface DashboardPost {
@@ -120,21 +126,33 @@ export function Dashboard() {
           activeTradeCount = trades.filter(trade => trade.status === 'open').length;
           
           trades.forEach(trade => {
+            // Safely create timestamp
+            let timestamp = 'Recently';
+            try {
+              if (trade.created_at) {
+                timestamp = new Date(trade.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+              }
+            } catch {
+              console.warn('Invalid date format for trade:', trade.trade_id);
+            }
+
             allPosts.push({
               id: trade.trade_id,
               type: 'trade',
               title: `Trading ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : ''}`,
               description: trade.description || `Looking to trade ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : '. Contact me for offers!'}`,
               user: {
-                username: trade.username,
+                username: trade.username || 'Unknown User',
                 robloxUsername: trade.roblox_username,
-                rating: Math.min(5, Math.max(1, Math.floor(trade.credibility_score / 20))),
-                vouchCount: Math.floor(trade.credibility_score / 2)
+                rating: Math.min(5, Math.max(1, Math.floor((trade.credibility_score || 0) / 20))),
+                vouchCount: Math.floor((trade.credibility_score || 0) / 2)
               },
-              timestamp: new Date(trade.created_at).toLocaleDateString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
+              timestamp,
               items: [trade.item_offered],
               wantedItems: trade.item_requested ? [trade.item_requested] : undefined,
               status: trade.status,
@@ -150,20 +168,32 @@ export function Dashboard() {
           const forumPosts: ForumPost[] = forumData.value;
           
           forumPosts.forEach(post => {
+            // Safely create timestamp
+            let timestamp = 'Recently';
+            try {
+              if (post.created_at) {
+                timestamp = new Date(post.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+              }
+            } catch {
+              console.warn('Invalid date format for forum post:', post.post_id);
+            }
+
             allPosts.push({
               id: post.post_id,
               type: 'forum',
               title: post.title,
-              description: post.content.length > 200 ? post.content.substring(0, 200) + '...' : post.content,
+              description: post.content && post.content.length > 200 ? post.content.substring(0, 200) + '...' : (post.content || 'No content available'),
               user: {
-                username: post.username,
-                rating: Math.min(5, Math.max(1, Math.floor(post.credibility_score / 20))),
-                vouchCount: Math.floor(post.credibility_score / 2)
+                username: post.username || 'Unknown User',
+                rating: Math.min(5, Math.max(1, Math.floor((post.credibility_score || 0) / 20))),
+                vouchCount: Math.floor((post.credibility_score || 0) / 2)
               },
-              timestamp: new Date(post.created_at).toLocaleDateString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
+              timestamp,
               comments: post.commentCount || 0,
               likes: post.upvotes || 0,
               category: post.category,
@@ -175,33 +205,64 @@ export function Dashboard() {
         // Process events data
         if (eventsData.status === 'fulfilled' && Array.isArray(eventsData.value)) {
           const events: Event[] = eventsData.value;
-          activeEventCount = events.length;
+          activeEventCount = events.filter(event => 
+            event.status === 'active' || event.status === 'upcoming'
+          ).length;
           
           events.forEach(event => {
+            // Safely create timestamp
+            let timestamp = 'Recently';
+            try {
+              if (event.createdAt) {
+                timestamp = new Date(event.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+              }
+            } catch {
+              console.warn('Invalid date format for event:', event._id);
+            }
+
             allPosts.push({
-              id: event.event_id,
+              id: event._id,
               type: 'event',
               title: event.title,
               description: event.description || 'Check out this community event!',
               user: {
-                username: event.created_by_username,
+                username: event.creator?.username || 'Event Host',
                 rating: 5,
                 vouchCount: 999,
-                verified: true,
+                verified: event.creator?.verified || true,
                 moderator: true
               },
-              timestamp: new Date(event.created_at).toLocaleDateString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
+              timestamp,
               comments: Math.floor(Math.random() * 100),
               likes: Math.floor(Math.random() * 200)
             });
           });
         }
 
-        // Sort posts by timestamp (newest first)
-        allPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        // Sort posts by timestamp (newest first) with better error handling
+        allPosts.sort((a, b) => {
+          try {
+            // Try to parse as dates first
+            const dateA = new Date(a.timestamp);
+            const dateB = new Date(b.timestamp);
+            
+            // If both are valid dates, sort by them
+            if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+              return dateB.getTime() - dateA.getTime();
+            }
+            
+            // Fallback to string comparison
+            return a.timestamp.localeCompare(b.timestamp);
+          } catch {
+            // If all else fails, maintain current order
+            return 0;
+          }
+        });
         
         // Calculate real active traders from trades data
         let activeTraderCount = 0;
@@ -407,6 +468,9 @@ export function Dashboard() {
                       src={post.image} 
                       alt="Trade item"
                       className="w-full h-48 object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   </div>
                 )}
