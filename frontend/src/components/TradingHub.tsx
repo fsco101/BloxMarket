@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Upload,
   X,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 interface Trade {
@@ -44,6 +45,7 @@ interface User {
   username: string;
   email: string;
   robloxUsername?: string;
+  role?: string;
 }
 
 interface ImageDisplayProps {
@@ -130,6 +132,7 @@ export function TradingHub() {
   const [error, setError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -445,6 +448,56 @@ export function TradingHub() {
       match: currentUser && currentUser.id === trade.user_id
     });
     return currentUser && currentUser.id === trade.user_id;
+  };
+
+  const canDeleteTrade = (trade: Trade) => {
+    // Trade owner, moderator, or admin can delete
+    if (!currentUser) return false;
+    return currentUser.id === trade.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  const handleDeleteTrade = async (tradeId: string, itemOffered: string) => {
+    if (!confirm(`Are you sure you want to delete the trade "${itemOffered}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeleteLoading(tradeId);
+      setError('');
+      
+      await apiService.deleteTrade(tradeId);
+      
+      // Reload trades to remove the deleted trade
+      await loadTrades();
+      
+      toast.success('Trade deleted successfully', {
+        description: 'The trade has been removed from the trading hub.'
+      });
+    } catch (err) {
+      console.error('Failed to delete trade:', err);
+      let errorMessage = 'Failed to delete trade';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('403')) {
+          errorMessage = 'You do not have permission to delete this trade.';
+        } else if (err.message.includes('404')) {
+          errorMessage = 'Trade not found. It may have already been deleted.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to delete trade', {
+        description: errorMessage
+      });
+    } finally {
+      setDeleteLoading(null);
+    }
   };
 
   const filteredTrades = trades.filter((trade) => {
@@ -970,12 +1023,28 @@ export function TradingHub() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1"
+                            className="text-blue-600 hover:text-blue-700"
                             onClick={() => handleEditTrade(trade)}
                           >
                             <Edit className="w-3 h-3 mr-1" />
                             Edit
                           </Button>
+                          {canDeleteTrade(trade) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() => handleDeleteTrade(trade.trade_id, trade.item_offered)}
+                              disabled={deleteLoading === trade.trade_id}
+                            >
+                              {deleteLoading === trade.trade_id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3 mr-1" />
+                              )}
+                              {deleteLoading === trade.trade_id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          )}
                         </>
                       ) : (
                         <>
@@ -986,6 +1055,22 @@ export function TradingHub() {
                           <Button variant="outline" size="sm" className="flex-1">
                             View Details
                           </Button>
+                          {canDeleteTrade(trade) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() => handleDeleteTrade(trade.trade_id, trade.item_offered)}
+                              disabled={deleteLoading === trade.trade_id}
+                            >
+                              {deleteLoading === trade.trade_id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3 mr-1" />
+                              )}
+                              {deleteLoading === trade.trade_id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>

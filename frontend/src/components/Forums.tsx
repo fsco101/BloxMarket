@@ -26,7 +26,8 @@ import {
   Upload,
   X,
   ImageIcon,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +36,7 @@ interface User {
   username: string;
   email: string;
   robloxUsername?: string;
+  role?: string;
 }
 
 interface ForumPost {
@@ -61,11 +63,12 @@ export function Forums() {
   const [error, setError] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [newPost, setNewPost] = useState({
     title: '',
@@ -422,6 +425,56 @@ export function Forums() {
 
   const canEditPost = (post: ForumPost) => {
     return currentUser && currentUser.id === post.user_id;
+  };
+
+  const canDeletePost = (post: ForumPost) => {
+    // Post owner, moderator, or admin can delete
+    if (!currentUser) return false;
+    return currentUser.id === post.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  const handleDeletePost = async (postId: string, postTitle: string) => {
+    if (!confirm(`Are you sure you want to delete the post "${postTitle}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeleteLoading(postId);
+      setError('');
+      
+      await apiService.deleteForumPost(postId);
+      
+      // Reload posts to remove the deleted post
+      await loadPosts();
+      
+      toast.success('Post deleted successfully', {
+        description: 'The post has been removed from the community.'
+      });
+    } catch (err: unknown) {
+      console.error('Failed to delete forum post:', err);
+      let errorMessage = 'Failed to delete post';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('403')) {
+          errorMessage = 'You do not have permission to delete this post.';
+        } else if (err.message.includes('404')) {
+          errorMessage = 'Post not found. It may have already been deleted.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to delete post', {
+        description: errorMessage
+      });
+    } finally {
+      setDeleteLoading(null);
+    }
   };
 
 
@@ -989,18 +1042,53 @@ export function Forums() {
                           size="sm" 
                           variant="outline"
                           onClick={() => handleEditPost(post)}
+                          className="text-blue-600 hover:text-blue-700"
                         >
                           <Edit className="w-3 h-3 mr-1" />
                           Edit
                         </Button>
+                        {canDeletePost(post) && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleDeletePost(post.post_id, post.title)}
+                            disabled={deleteLoading === post.post_id}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            {deleteLoading === post.post_id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3 mr-1" />
+                            )}
+                            {deleteLoading === post.post_id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline">
                           Reply
                         </Button>
                       </>
                     ) : (
-                      <Button size="sm" variant="outline">
-                        Reply
-                      </Button>
+                      <>
+                        {canDeletePost(post) && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleDeletePost(post.post_id, post.title)}
+                            disabled={deleteLoading === post.post_id}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            {deleteLoading === post.post_id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3 mr-1" />
+                            )}
+                            {deleteLoading === post.post_id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline">
+                          Reply
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
