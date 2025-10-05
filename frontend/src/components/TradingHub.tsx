@@ -66,8 +66,8 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
   };
 
   const handleImageError = () => {
+    console.error('Image failed to load:', src);
     if (retryCount < 2) {
-      // Retry loading the image up to 2 times
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
         setImageError(false);
@@ -110,11 +110,13 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
         </div>
       )}
       <img
-        src={`${src}?v=${retryCount}`} // Add cache-busting parameter
+        src={`${src}${retryCount > 0 ? `?v=${retryCount}` : ''}`}
         alt={alt}
         className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
         onLoad={handleImageLoad}
         onError={handleImageError}
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
       />
     </div>
   );
@@ -955,7 +957,7 @@ export function TradingHub() {
                     {trade.images && trade.images.length > 0 && (
                       <div className="relative">
                         <ImageDisplay
-                          src={`http://localhost:5000${trade.images[0].image_url}`}
+                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${trade.images[0].image_url.split('/').pop()}`}
                           alt={`${trade.item_offered} - Trade item`}
                           className="w-full h-32 object-cover rounded-lg"
                         />
