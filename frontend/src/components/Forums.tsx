@@ -107,8 +107,8 @@ export function Forums() {
     };
 
     const handleImageError = () => {
+      console.error('Image failed to load:', src);
       if (retryCount < 2) {
-        // Retry loading the image up to 2 times
         setTimeout(() => {
           setRetryCount(prev => prev + 1);
           setImageError(false);
@@ -151,11 +151,13 @@ export function Forums() {
           </div>
         )}
         <img
-          src={`${src}?v=${retryCount}`} // Add cache-busting parameter
+          src={`${src}${retryCount > 0 ? `?v=${retryCount}` : ''}`}
           alt={alt}
           className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
           onLoad={handleImageLoad}
           onError={handleImageError}
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
         />
       </div>
     );
@@ -975,7 +977,7 @@ export function Forums() {
                             {post.images.slice(0, 3).map((image: any, imageIndex: number) => (
                               <div key={imageIndex} className="aspect-square overflow-hidden rounded-lg border">
                                 <ImageDisplay
-                                  src={`http://localhost:5000/uploads/forum/${image.filename}`}
+                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
                                   alt={image.originalName || `Image ${imageIndex + 1}`}
                                   className="w-full h-full"
                                 />

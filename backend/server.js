@@ -19,6 +19,7 @@ import tradeRoutes from './routes/trades.js';
 import forumRoutes from './routes/forum.js';
 import eventRoutes from './routes/events.js';
 import adminRoutes from './routes/admin.js';
+import uploadsRoutes from './routes/uploads.js';
 
 dotenv.config();
 
@@ -77,6 +78,20 @@ async function connectToDatabase() {
 // Connect to database
 connectToDatabase();
 
+// Add CORS middleware before your routes (if not already present)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -84,6 +99,7 @@ app.use('/api/trades', tradeRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/uploads', uploadsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
