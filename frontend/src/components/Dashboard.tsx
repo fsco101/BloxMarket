@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Dialog, DialogContent } from './ui/dialog';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import { 
@@ -20,7 +21,14 @@ import {
   Loader2,
   AlertCircle,
   Eye,
-  ImageIcon
+  ImageIcon,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Send,
+  MoreHorizontal,
+  Share,
+  User
 } from 'lucide-react';
 
 // Type definitions
@@ -93,6 +101,21 @@ interface DashboardPost {
   status?: string;
 }
 
+// Add interfaces for modal components
+interface PostModalProps {
+  post: DashboardPost | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onUserClick: (userId: string) => void;
+}
+
+interface ImageViewerProps {
+  images: Array<{ url: string; type: 'trade' | 'forum' }>;
+  currentIndex: number;
+  onNext: () => void;
+  onPrevious: () => void;
+}
+
 // Enhanced Image Display Component
 interface ImageDisplayProps {
   src: string;
@@ -147,6 +170,325 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
   );
 }
 
+// New Image Viewer Component
+function ImageViewer({ images, currentIndex, onNext, onPrevious }: ImageViewerProps) {
+  if (!images || images.length === 0) return null;
+
+  return (
+    <div className="relative bg-black rounded-lg overflow-hidden h-full flex items-center justify-center">
+      {images.length > 1 && (
+        <>
+          <button
+            onClick={onPrevious}
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <button
+            onClick={onNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+        </>
+      )}
+      
+      <img
+        src={images[currentIndex].url}
+        alt={`Image ${currentIndex + 1}`}
+        className="max-w-full max-h-full object-contain"
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
+      />
+      
+      {images.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+          {currentIndex + 1} / {images.length}
+        </div>
+      )}
+      
+      {/* Image navigation dots */}
+      {images.length > 1 && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-2">
+          {images.map((_, index) => (
+            <button
+              key={index}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                index === currentIndex ? 'bg-white' : 'bg-white/50'
+              }`}
+              onClick={() => {
+                const diff = index - currentIndex;
+                if (diff > 0) {
+                  for (let i = 0; i < diff; i++) onNext();
+                } else if (diff < 0) {
+                  for (let i = 0; i < Math.abs(diff); i++) onPrevious();
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// New Post Modal Component
+function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [liked, setLiked] = useState(false);
+  const [comment, setComment] = useState('');
+  const [comments, setComments] = useState([
+    { id: 1, user: 'JohnDoe', content: 'Great trade! Interested!', time: '2m ago', avatar: 'J' },
+    { id: 2, user: 'TraderGirl', content: 'Is this still available?', time: '5m ago', avatar: 'T' },
+  ]);
+
+  // Helper functions for modal
+  const getPostTypeIcon = (type: string) => {
+    switch (type) {
+      case 'trade': return <TrendingUp className="w-4 h-4" />;
+      case 'event': return <Gift className="w-4 h-4" />;
+      case 'forum': return <MessageSquare className="w-4 h-4" />;
+      default: return <MessageSquare className="w-4 h-4" />;
+    }
+  };
+
+  const getPostTypeColor = (type: string) => {
+    switch (type) {
+      case 'trade': return 'bg-blue-500';
+      case 'event': return 'bg-green-500';
+      case 'forum': return 'bg-purple-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  if (!post) return null;
+
+  const handleNext = () => {
+    if (post.images && post.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev + 1) % post.images!.length);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (post.images && post.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev - 1 + post.images!.length) % post.images!.length);
+    }
+  };
+
+  const handleLike = () => {
+    setLiked(!liked);
+  };
+
+  const handleComment = () => {
+    if (comment.trim()) {
+      setComments([
+        { 
+          id: Date.now(), 
+          user: 'You', 
+          content: comment, 
+          time: 'now', 
+          avatar: 'Y' 
+        },
+        ...comments
+      ]);
+      setComment('');
+    }
+  };
+
+  const handleUserClick = () => {
+    onUserClick(post.id); // Pass the user ID or post ID to identify the user
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full p-0 overflow-hidden">
+        <div className="flex h-[95vh]">
+          {/* Left side - Image Viewer */}
+          <div className="flex-1 bg-black relative">
+            <button
+              onClick={onClose}
+              className="absolute top-6 right-6 z-20 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            {post.images && post.images.length > 0 ? (
+              <ImageViewer
+                images={post.images}
+                currentIndex={currentImageIndex}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-white/70">
+                <div className="text-center">
+                  <ImageIcon className="w-20 h-20 mx-auto mb-6 opacity-50" />
+                  <p className="text-lg">No images available</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right side - Post Details and Comments */}
+          <div className="w-[450px] bg-background border-l flex flex-col">
+            {/* Post Header */}
+            <div className="p-6 border-b">
+              <div className="flex items-center gap-4">
+                <button onClick={handleUserClick} className="flex items-center gap-4 hover:bg-muted/50 rounded-lg p-2 transition-colors">
+                  <Avatar className="w-12 h-12">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-lg">
+                      {post.user.username[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-base">{post.user.username}</span>
+                      {post.user.verified && (
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                          ✓
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Clock className="w-4 h-4" />
+                      <span>{post.timestamp}</span>
+                    </div>
+                  </div>
+                </button>
+                <div className="ml-auto">
+                  <Button variant="ghost" size="sm">
+                    <MoreHorizontal className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Post Content */}
+            <div className="p-6 border-b">
+              <h3 className="font-semibold text-xl mb-3">{post.title}</h3>
+              <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{post.description}</p>
+              
+              {/* Post Type Badge */}
+              <Badge className={`${getPostTypeColor(post.type)} text-white text-sm px-3 py-1`}>
+                {getPostTypeIcon(post.type)}
+                <span className="ml-2 capitalize">{post.type}</span>
+              </Badge>
+
+              {/* Trade Details */}
+              {post.type === 'trade' && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <span className="text-sm text-muted-foreground font-medium">Offering:</span>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {post.items?.map((item, i) => (
+                        <Badge key={i} variant="outline" className="text-sm bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 px-3 py-1">
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {post.wantedItems && (
+                    <div>
+                      <span className="text-sm text-muted-foreground font-medium">Looking for:</span>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {post.wantedItems.map((item, i) => (
+                          <Badge key={i} variant="outline" className="text-sm bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-3 py-1">
+                            {item}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={handleLike}
+                    className={`${liked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500`}
+                  >
+                    <Heart className={`w-5 h-5 mr-2 ${liked ? 'fill-current' : ''}`} />
+                    {(post.likes || 0) + (liked ? 1 : 0)}
+                  </Button>
+                  <Button variant="ghost" size="lg" className="text-muted-foreground">
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    {comments.length}
+                  </Button>
+                  <Button variant="ghost" size="lg" className="text-muted-foreground">
+                    <Share className="w-5 h-5 mr-2" />
+                    Share
+                  </Button>
+                </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-500">
+                  <Flag className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Comments Section */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-4">
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
+                        {comment.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="bg-muted/50 rounded-lg p-4">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="font-medium text-sm">{comment.user}</span>
+                          <span className="text-xs text-muted-foreground">{comment.time}</span>
+                        </div>
+                        <p className="text-sm leading-relaxed">{comment.content}</p>
+                      </div>
+                      <div className="flex items-center gap-6 mt-2 text-xs text-muted-foreground">
+                        <button className="hover:text-foreground transition-colors">Like</button>
+                        <button className="hover:text-foreground transition-colors">Reply</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Comment Input */}
+            <div className="p-6 border-t">
+              <div className="flex gap-4">
+                <Avatar className="w-10 h-10">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                    Y
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 flex gap-3">
+                  <Input
+                    placeholder="Write a comment..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleComment()}
+                    className="text-sm h-10"
+                  />
+                  <Button size="sm" onClick={handleComment} disabled={!comment.trim()} className="px-4">
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -158,6 +500,32 @@ export function Dashboard() {
     activeTrades: 0,
     liveEvents: 0
   });
+  const [selectedPost, setSelectedPost] = useState<DashboardPost | null>(null);
+  const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+
+  // Add the missing handleUserClick function
+  const handleUserClick = (userId: string) => {
+    // For now, show a toast message. Later you can implement a user profile modal
+    toast.info(`Viewing profile for user: ${userId}`, {
+      description: 'User profile functionality coming soon!'
+    });
+    
+    // Alternative: You could open a user profile modal here
+    // setSelectedUserId(userId);
+    // setIsUserProfileModalOpen(true);
+  };
+
+  // Add the handlePostClick function
+  const handlePostClick = (post: DashboardPost) => {
+    setSelectedPost(post);
+    setIsPostModalOpen(true);
+  };
+
+  // Add the handleCloseModal function
+  const handleCloseModal = () => {
+    setIsPostModalOpen(false);
+    setSelectedPost(null);
+  };
 
   // Load data from APIs
   useEffect(() => {
@@ -370,6 +738,7 @@ export function Dashboard() {
     loadDashboardData();
   }, []);
 
+  // Helper functions - add these before the return statement
   const getPostTypeIcon = (type: string) => {
     switch (type) {
       case 'trade': return <TrendingUp className="w-4 h-4" />;
@@ -479,47 +848,59 @@ export function Dashboard() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           {filteredPosts.map((post) => (
-            <Card key={post.id} className="relative hover:shadow-lg transition-shadow duration-200">
+            <Card 
+              key={post.id} 
+              className="relative hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+              onClick={() => handlePostClick(post)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                        {post.user.username[0]?.toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{post.user.username}</span>
-                        {post.user.verified && (
-                          <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                            ✓ Verified
-                          </Badge>
-                        )}
-                        {post.user.moderator && (
-                          <Badge variant="secondary" className="text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-                            MOD
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>@{post.user.robloxUsername || post.user.username}</span>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={`w-3 h-3 ${i < post.user.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
-                            ))}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUserClick(post.user.username);
+                      }}
+                      className="flex items-center gap-3 hover:bg-muted/50 rounded-lg p-1 transition-colors"
+                    >
+                      <Avatar className="w-10 h-10">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                          {post.user.username[0]?.toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{post.user.username}</span>
+                          {post.user.verified && (
+                            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                              ✓ Verified
+                            </Badge>
+                          )}
+                          {post.user.moderator && (
+                            <Badge variant="secondary" className="text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+                              MOD
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span>@{post.user.robloxUsername || post.user.username}</span>
+                          <span>•</span>
+                          <div className="flex items-center gap-1">
+                            <div className="flex">
+                              {[...Array(5)].map((_, i) => (
+                                <Star key={i} className={`w-3 h-3 ${i < post.user.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                              ))}
+                            </div>
+                            <span>({post.user.vouchCount})</span>
                           </div>
-                          <span>({post.user.vouchCount})</span>
-                        </div>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{post.timestamp}</span>
+                          <span>•</span>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{post.timestamp}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   </div>
                   
                   <div className="flex items-center gap-2">
@@ -537,16 +918,19 @@ export function Dashboard() {
                   <p className="text-muted-foreground">{post.description}</p>
                 </div>
 
-                {/* Enhanced Image Display */}
+                {/* Enhanced Image Display - Show preview */}
                 {post.images && post.images.length > 0 && (
                   <div className="space-y-3">
                     {post.images.length === 1 ? (
-                      <div className="rounded-lg overflow-hidden">
+                      <div className="rounded-lg overflow-hidden relative group">
                         <ImageDisplay
                           src={post.images[0].url}
                           alt={`${post.type} image`}
                           className="w-full h-48"
                         />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <Eye className="w-8 h-8 text-white" />
+                        </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -638,26 +1022,31 @@ export function Dashboard() {
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                      <Heart className="w-4 h-4 mr-1" />
-                      {post.likes}
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                      <MessageSquare className="w-4 h-4 mr-1" />
-                      {post.comments}
-                    </Button>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Heart className="w-4 h-4" />
+                      <span>{post.likes}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <MessageSquare className="w-4 h-4" />
+                      <span>{post.comments}</span>
+                    </div>
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
+                    <Button 
+                      size="sm" 
+                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       Message
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Star className="w-4 h-4 mr-1" />
                       Vouch
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-                      <Flag className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
@@ -678,6 +1067,14 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Post Modal */}
+      <PostModal
+        post={selectedPost}
+        isOpen={isPostModalOpen}
+        onClose={handleCloseModal}
+        onUserClick={handleUserClick}
+      />
     </div>
   );
 }
