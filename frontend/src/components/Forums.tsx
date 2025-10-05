@@ -27,7 +27,9 @@ import {
   X,
   ImageIcon,
   Edit,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,6 +54,300 @@ interface ForumPost {
   user_id: string;
   images?: { filename: string; originalName?: string }[];
   commentCount: number;
+}
+
+// Add new interfaces for modals
+interface ForumImageModalProps {
+  images: { filename: string; originalName?: string }[];
+  currentIndex: number;
+  isOpen: boolean;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+}
+
+interface PostDetailsModalProps {
+  post: ForumPost | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  canEdit: boolean;
+  canDelete: boolean;
+  deleteLoading: boolean;
+}
+
+// Enhanced Image Display Component - MOVED TO TOP
+interface ImageDisplayProps {
+  src: string;
+  alt: string;
+  className?: string;
+  fallback?: React.ReactNode;
+}
+
+function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  const handleImageError = () => {
+    console.error('Image failed to load:', src);
+    if (retryCount < 2) {
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        setImageError(false);
+        setImageLoading(true);
+      }, 1000);
+    } else {
+      setImageLoading(false);
+      setImageError(true);
+    }
+  };
+
+  const handleRetry = () => {
+    setRetryCount(0);
+    setImageError(false);
+    setImageLoading(true);
+  };
+
+  if (imageError) {
+    return fallback || (
+      <div className={`bg-gray-100 dark:bg-gray-800 flex items-center justify-center ${className}`}>
+        <div className="text-center text-gray-400">
+          <Upload className="w-8 h-8 mx-auto mb-1" />
+          <span className="text-xs block mb-1">Image unavailable</span>
+          <button
+            onClick={handleRetry}
+            className="text-xs text-blue-500 hover:text-blue-600 underline focus:outline-none"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      {imageLoading && (
+        <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center rounded">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      )}
+      <img
+        src={`${src}${retryCount > 0 ? `?v=${retryCount}` : ''}`}
+        alt={alt}
+        className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
+      />
+    </div>
+  );
+}
+
+// Forum Image Modal Component
+function ForumImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrevious }: ForumImageModalProps) {
+  if (!isOpen || !images || images.length === 0) return null;
+
+  const currentImage = images[currentIndex];
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+        <div className="relative bg-black rounded-lg overflow-hidden">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={onPrevious}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onNext}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          
+          <div className="relative aspect-video bg-black flex items-center justify-center">
+            <img
+              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${currentImage.filename}`}
+              alt={currentImage.originalName || `Image ${currentIndex + 1}`}
+              className="max-w-full max-h-full object-contain"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          
+          {images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+              {currentIndex + 1} / {images.length}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Post Details Modal Component
+function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, canDelete, deleteLoading }: PostDetailsModalProps) {
+  if (!post) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-blue-500" />
+            <span>{post.title}</span>
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Author Info */}
+          <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+            <Avatar className="w-12 h-12">
+              <AvatarFallback>{post.username?.[0] || 'U'}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{post.username}</span>
+                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                  {post.credibility_score || 0}★
+                </Badge>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Posted on {new Date(post.created_at).toLocaleDateString()} at {new Date(post.created_at).toLocaleTimeString()}
+              </div>
+            </div>
+            <Badge variant="outline" className="text-xs capitalize">
+              {post.category?.replace('_', ' ')}
+            </Badge>
+          </div>
+
+          {/* Post Content */}
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <div className="whitespace-pre-wrap text-sm leading-relaxed">
+              {post.content}
+            </div>
+          </div>
+
+          {/* Images Grid */}
+          {post.images && post.images.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold">Images ({post.images.length})</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {post.images.map((image, index) => (
+                  <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow group">
+                    <div className="relative w-full h-full">
+                      <ImageDisplay
+                        src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
+                        alt={image.originalName || `Image ${index + 1}`}
+                        className="w-full h-full"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <Eye className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Post Stats */}
+          <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-green-600">
+                <ArrowUp className="w-4 h-4" />
+                <span className="font-medium">{post.upvotes}</span>
+              </div>
+              <span className="text-muted-foreground">Upvotes</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-red-600">
+                <ArrowDown className="w-4 h-4" />
+                <span className="font-medium">{post.downvotes}</span>
+              </div>
+              <span className="text-muted-foreground">Downvotes</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-blue-600">
+                <MessageCircle className="w-4 h-4" />
+                <span className="font-medium">{post.commentCount || 0}</span>
+              </div>
+              <span className="text-muted-foreground">Replies</span>
+            </div>
+          </div>
+
+          {/* Post ID */}
+          <div className="text-center text-xs text-muted-foreground">
+            Post ID: <span className="font-mono">{post.post_id.slice(-8)}</span>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t">
+            <div className="flex items-center gap-1 flex-1">
+              <Button variant="ghost" size="sm" className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950">
+                <ArrowUp className="w-4 h-4 mr-1" />
+                Upvote ({post.upvotes})
+              </Button>
+              <Button variant="ghost" size="sm" className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950">
+                <ArrowDown className="w-4 h-4 mr-1" />
+                Downvote ({post.downvotes})
+              </Button>
+            </div>
+            
+            <Button variant="outline">
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Reply
+            </Button>
+            
+            {canEdit && (
+              <Button variant="outline" onClick={onEdit}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            )}
+            
+            {canDelete && (
+              <Button 
+                variant="outline" 
+                onClick={onDelete}
+                disabled={deleteLoading}
+                className="text-red-600 hover:text-red-700"
+              >
+                {deleteLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function Forums() {
@@ -82,161 +378,18 @@ export function Forums() {
     category: 'general'
   });
   
-  // Image upload state
+  // Image upload state - FIXED SYNTAX ERROR
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
-  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]);
+  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]); // FIXED: Removed extra >
 
-  // Enhanced Image Display Component with retry functionality
-  interface ImageDisplayProps {
-    src: string;
-    alt: string;
-    className?: string;
-    fallback?: React.ReactNode;
-  }
-
-  function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
-    const [imageError, setImageError] = useState(false);
-    const [imageLoading, setImageLoading] = useState(true);
-    const [retryCount, setRetryCount] = useState(0);
-
-    const handleImageLoad = () => {
-      setImageLoading(false);
-      setImageError(false);
-    };
-
-    const handleImageError = () => {
-      console.error('Image failed to load:', src);
-      if (retryCount < 2) {
-        setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-          setImageError(false);
-          setImageLoading(true);
-        }, 1000);
-      } else {
-        setImageLoading(false);
-        setImageError(true);
-      }
-    };
-
-    const handleRetry = () => {
-      setRetryCount(0);
-      setImageError(false);
-      setImageLoading(true);
-    };
-
-    if (imageError) {
-      return fallback || (
-        <div className={`bg-gray-100 dark:bg-gray-800 flex items-center justify-center ${className}`}>
-          <div className="text-center text-gray-400">
-            <Upload className="w-8 h-8 mx-auto mb-1" />
-            <span className="text-xs block mb-1">Image unavailable</span>
-            <button
-              onClick={handleRetry}
-              className="text-xs text-blue-500 hover:text-blue-600 underline focus:outline-none"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className={`relative ${className}`}>
-        {imageLoading && (
-          <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center rounded">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-          </div>
-        )}
-        <img
-          src={`${src}${retryCount > 0 ? `?v=${retryCount}` : ''}`}
-          alt={alt}
-          className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-        />
-      </div>
-    );
-  }
-
-  // Image handling functions
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const remainingSlots = 5 - selectedImages.length;
-    const filesToAdd = files.slice(0, remainingSlots);
-    
-    // Validate file types and sizes
-    const validFiles = filesToAdd.filter(file => {
-      if (!file.type.startsWith('image/')) {
-        toast.error(`${file.name} is not an image file`);
-        return false;
-      }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error(`${file.name} is too large (max 5MB)`);
-        return false;
-      }
-      return true;
-    });
-    
-    if (validFiles.length > 0) {
-      setSelectedImages(prev => [...prev, ...validFiles]);
-      
-      // Create preview URLs
-      validFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviewUrls(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const remainingSlots = 5 - editSelectedImages.length;
-    const filesToAdd = files.slice(0, remainingSlots);
-    
-    // Validate file types and sizes
-    const validFiles = filesToAdd.filter(file => {
-      if (!file.type.startsWith('image/')) {
-        toast.error(`${file.name} is not an image file`);
-        return false;
-      }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error(`${file.name} is too large (max 5MB)`);
-        return false;
-      }
-      return true;
-    });
-    
-    if (validFiles.length > 0) {
-      setEditSelectedImages(prev => [...prev, ...validFiles]);
-      
-      // Create preview URLs
-      validFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setEditImagePreviewUrls(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleRemoveEditImage = (index: number) => {
-    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
-    setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
-  };
+  // Modal states
+  const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
+  const [isPostDetailsOpen, setIsPostDetailsOpen] = useState(false);
+  const [isForumImageModalOpen, setIsForumImageModalOpen] = useState(false);
+  const [selectedForumImages, setSelectedForumImages] = useState<{ filename: string; originalName?: string }[]>([]);
+  const [currentForumImageIndex, setCurrentForumImageIndex] = useState(0);
 
   // Load current user
   useEffect(() => {
@@ -281,10 +434,133 @@ export function Forums() {
     }
   };
 
+  // Modal functions
+  const handlePostClick = (post: ForumPost) => {
+    setSelectedPost(post);
+    setIsPostDetailsOpen(true);
+  };
+
+  const handleForumImageClick = (images: { filename: string; originalName?: string }[], index: number) => {
+    setSelectedForumImages(images);
+    setCurrentForumImageIndex(index);
+    setIsForumImageModalOpen(true);
+  };
+
+  const handleNextForumImage = () => {
+    setCurrentForumImageIndex((prev) => (prev + 1) % selectedForumImages.length);
+  };
+
+  const handlePreviousForumImage = () => {
+    setCurrentForumImageIndex((prev) => (prev - 1 + selectedForumImages.length) % selectedForumImages.length);
+  };
+
+  const handleEditFromModal = () => {
+    if (selectedPost) {
+      setIsPostDetailsOpen(false);
+      handleEditPost(selectedPost);
+    }
+  };
+
+  const handleDeleteFromModal = () => {
+    if (selectedPost) {
+      setIsPostDetailsOpen(false);
+      handleDeletePost(selectedPost.post_id, selectedPost.title);
+    }
+  };
+
+  // Image handling functions
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length + selectedImages.length > 5) {
+      setError('Maximum 5 images allowed');
+      return;
+    }
+
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        setError('Only image files are allowed');
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be less than 5MB');
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setSelectedImages(prev => [...prev, ...validFiles]);
+      
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreviewUrls(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length + editSelectedImages.length > 5) {
+      setError('Maximum 5 images allowed');
+      return;
+    }
+
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        setError('Only image files are allowed');
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be less than 5MB');
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setEditSelectedImages(prev => [...prev, ...validFiles]);
+      
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setEditImagePreviewUrls(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveEditImage = (index: number) => {
+    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Permission functions
+  const canEditPost = (post: ForumPost) => {
+    return currentUser && currentUser.id === post.user_id;
+  };
+
+  const canDeletePost = (post: ForumPost) => {
+    if (!currentUser) return false;
+    return currentUser.id === post.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  // CRUD functions
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
     if (!newPost.title.trim()) {
       setError('Title is required');
       return;
@@ -297,8 +573,6 @@ export function Forums() {
     try {
       setCreateLoading(true);
       setError('');
-      
-      console.log('Creating forum post with images:', selectedImages.length);
       
       await apiService.createForumPost({
         title: newPost.title,
@@ -315,10 +589,8 @@ export function Forums() {
       setSelectedImages([]);
       setImagePreviewUrls([]);
       
-      // Reload posts to show the new one
       await loadPosts();
       
-      console.log('Forum post created successfully');
       toast.success('Post created successfully! 🎉', {
         description: 'Your post has been published and is now visible to the community.'
       });
@@ -366,7 +638,6 @@ export function Forums() {
     
     if (!editingPost) return;
     
-    // Validation
     if (!editPost.title.trim()) {
       setError('Title is required');
       return;
@@ -386,7 +657,6 @@ export function Forums() {
         category: editPost.category
       }, editSelectedImages);
       
-      // Reset form
       setIsEditDialogOpen(false);
       setEditingPost(null);
       setEditPost({
@@ -397,7 +667,6 @@ export function Forums() {
       setEditSelectedImages([]);
       setEditImagePreviewUrls([]);
       
-      // Reload posts to show the updated one
       await loadPosts();
       
       toast.success('Post updated successfully! 🎉', {
@@ -425,18 +694,6 @@ export function Forums() {
     }
   };
 
-  const canEditPost = (post: ForumPost) => {
-    return currentUser && currentUser.id === post.user_id;
-  };
-
-  const canDeletePost = (post: ForumPost) => {
-    // Post owner, moderator, or admin can delete
-    if (!currentUser) return false;
-    return currentUser.id === post.user_id || 
-           currentUser.role === 'admin' || 
-           currentUser.role === 'moderator';
-  };
-
   const handleDeletePost = async (postId: string, postTitle: string) => {
     if (!confirm(`Are you sure you want to delete the post "${postTitle}"? This action cannot be undone.`)) {
       return;
@@ -448,7 +705,6 @@ export function Forums() {
       
       await apiService.deleteForumPost(postId);
       
-      // Reload posts to remove the deleted post
       await loadPosts();
       
       toast.success('Post deleted successfully', {
@@ -479,8 +735,7 @@ export function Forums() {
     }
   };
 
-
-
+  // Helper data and functions
   const categories = [
     { value: 'all', label: 'All Categories' },
     { value: 'trading_tips', label: 'Trading Tips' },
@@ -488,15 +743,6 @@ export function Forums() {
     { value: 'game_updates', label: 'Game Updates' },
     { value: 'general', label: 'General Discussion' }
   ];
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'staff': return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
-      case 'moderator': return 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300';
-      case 'expert': return 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300';
-    }
-  };
 
   const filteredPosts = posts.filter((post: ForumPost) => {
     const matchesSearch = searchTerm === '' || 
@@ -947,7 +1193,7 @@ export function Forums() {
             <Card key={post.post_id} className="hover:shadow-lg transition-all duration-200 cursor-pointer">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3" onClick={() => handlePostClick(post)}>
                     <Avatar className="w-12 h-12">
                       <AvatarFallback>{post.username?.[0] || 'U'}</AvatarFallback>
                     </Avatar>
@@ -972,19 +1218,31 @@ export function Forums() {
                       
                       {/* Images */}
                       {post.images && post.images.length > 0 && (
-                        <div className="mb-3">
+                        <div className="mb-3" onClick={(e) => e.stopPropagation()}>
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                             {post.images.slice(0, 3).map((image: any, imageIndex: number) => (
-                              <div key={imageIndex} className="aspect-square overflow-hidden rounded-lg border">
-                                <ImageDisplay
-                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
-                                  alt={image.originalName || `Image ${imageIndex + 1}`}
-                                  className="w-full h-full"
-                                />
+                              <div 
+                                key={imageIndex} 
+                                className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow group"
+                                onClick={() => handleForumImageClick(post.images!, imageIndex)}
+                              >
+                                <div className="relative w-full h-full">
+                                  <ImageDisplay
+                                    src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
+                                    alt={image.originalName || `Image ${imageIndex + 1}`}
+                                    className="w-full h-full"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                    <Eye className="w-5 h-5 text-white" />
+                                  </div>
+                                </div>
                               </div>
                             ))}
                             {post.images.length > 3 && (
-                              <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg border flex items-center justify-center">
+                              <div 
+                                className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg border flex items-center justify-center cursor-pointer hover:shadow-md transition-shadow"
+                                onClick={() => handleForumImageClick(post.images!, 3)}
+                              >
                                 <div className="text-center text-gray-500 dark:text-gray-400">
                                   <ImageIcon className="w-6 h-6 mx-auto mb-1" />
                                   <span className="text-xs">+{post.images.length - 3} more</span>
@@ -1026,7 +1284,7 @@ export function Forums() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950">
                         <ArrowUp className="w-4 h-4" />
@@ -1038,60 +1296,48 @@ export function Forums() {
                       </Button>
                     </div>
                     
-                    {canEditPost(post) ? (
-                      <>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleEditPost(post)}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
-                        {canDeletePost(post) && (
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleDeletePost(post.post_id, post.title)}
-                            disabled={deleteLoading === post.post_id}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            {deleteLoading === post.post_id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3 mr-1" />
-                            )}
-                            {deleteLoading === post.post_id ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline">
-                          Reply
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        {canDeletePost(post) && (
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleDeletePost(post.post_id, post.title)}
-                            disabled={deleteLoading === post.post_id}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            {deleteLoading === post.post_id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3 mr-1" />
-                            )}
-                            {deleteLoading === post.post_id ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline">
-                          Reply
-                        </Button>
-                      </>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handlePostClick(post)}
+                    >
+                      <Eye className="w-3 h-3 mr-1" />
+                      View
+                    </Button>
+                    
+                    {canEditPost(post) && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleEditPost(post)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        Edit
+                      </Button>
                     )}
+                    
+                    {canDeletePost(post) && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDeletePost(post.post_id, post.title)}
+                        disabled={deleteLoading === post.post_id}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        {deleteLoading === post.post_id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3 mr-1" />
+                        )}
+                        {deleteLoading === post.post_id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    )}
+                    
+                    <Button size="sm" variant="outline">
+                      <MessageCircle className="w-3 h-3 mr-1" />
+                      Reply
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -1111,6 +1357,27 @@ export function Forums() {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <ForumImageModal
+        images={selectedForumImages}
+        currentIndex={currentForumImageIndex}
+        isOpen={isForumImageModalOpen}
+        onClose={() => setIsForumImageModalOpen(false)}
+        onNext={handleNextForumImage}
+        onPrevious={handlePreviousForumImage}
+      />
+
+      <PostDetailsModal
+        post={selectedPost}
+        isOpen={isPostDetailsOpen}
+        onClose={() => setIsPostDetailsOpen(false)}
+        onEdit={handleEditFromModal}
+        onDelete={handleDeleteFromModal}
+        canEdit={selectedPost ? canEditPost(selectedPost) : false}
+        canDelete={selectedPost ? canDeletePost(selectedPost) : false}
+        deleteLoading={selectedPost ? deleteLoading === selectedPost.post_id : false}
+      />
     </div>
   );
 }

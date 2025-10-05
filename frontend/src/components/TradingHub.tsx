@@ -23,7 +23,10 @@ import {
   Upload,
   X,
   Edit,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 
 interface Trade {
@@ -122,6 +125,235 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
   );
 }
 
+// Add new interfaces for modals
+interface ImageModalProps {
+  images: { image_url: string; uploaded_at: string }[];
+  currentIndex: number;
+  isOpen: boolean;
+  onClose: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+}
+
+interface TradeDetailsModalProps {
+  trade: Trade | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  canEdit: boolean;
+  canDelete: boolean;
+  deleteLoading: boolean;
+}
+
+// Image Modal Component
+function ImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrevious }: ImageModalProps) {
+  if (!isOpen || !images || images.length === 0) return null;
+
+  const currentImage = images[currentIndex];
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+        <div className="relative bg-black rounded-lg overflow-hidden">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={onPrevious}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onNext}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 text-white rounded-full p-2 hover:bg-black/70 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          
+          <div className="relative aspect-video bg-black flex items-center justify-center">
+            <img
+              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${currentImage.image_url.split('/').pop()}`}
+              alt={`Trade image ${currentIndex + 1}`}
+              className="max-w-full max-h-full object-contain"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          
+          {images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+              {currentIndex + 1} / {images.length}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Trade Details Modal Component
+function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, canDelete, deleteLoading }: TradeDetailsModalProps) {
+  if (!trade) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Trade Details</span>
+            <Badge className={`${trade.status === 'open' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 
+              trade.status === 'in_progress' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 
+              trade.status === 'completed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 
+              'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+              {trade.status}
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Trader Info */}
+          <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+            <Avatar className="w-12 h-12">
+              <AvatarFallback>{trade.username?.[0] || 'U'}</AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{trade.username}</span>
+                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                  {trade.credibility_score || 0}★
+                </Badge>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                @{trade.roblox_username}
+              </div>
+            </div>
+          </div>
+
+          {/* Trade Items */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 border rounded-lg">
+              <h3 className="font-semibold text-green-700 dark:text-green-300 mb-2">Offering</h3>
+              <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">
+                {trade.item_offered}
+              </Badge>
+            </div>
+            
+            {trade.item_requested && (
+              <div className="p-4 border rounded-lg">
+                <h3 className="font-semibold text-blue-700 dark:text-blue-300 mb-2">Looking for</h3>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                  {trade.item_requested}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          {trade.description && (
+            <div className="p-4 border rounded-lg">
+              <h3 className="font-semibold mb-2">Description</h3>
+              <p className="text-muted-foreground whitespace-pre-wrap">{trade.description}</p>
+            </div>
+          )}
+
+          {/* Images Grid */}
+          {trade.images && trade.images.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold">Images ({trade.images.length})</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {trade.images.map((image, index) => (
+                  <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow">
+                    <ImageDisplay
+                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${image.image_url.split('/').pop()}`}
+                      alt={`Trade image ${index + 1}`}
+                      className="w-full h-full"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Trade Info */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
+            <div>
+              <span className="text-muted-foreground">Posted:</span>
+              <div className="font-medium">{new Date(trade.created_at).toLocaleDateString()}</div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Trade ID:</span>
+              <div className="font-medium font-mono">{trade.trade_id.slice(-8)}</div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t">
+            {canEdit ? (
+              <>
+                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Contact Trader
+                </Button>
+                <Button variant="outline" onClick={onEdit}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+                {canDelete && (
+                  <Button 
+                    variant="outline" 
+                    onClick={onDelete}
+                    disabled={deleteLoading}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    {deleteLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-2" />
+                    )}
+                    {deleteLoading ? 'Deleting...' : 'Delete'}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Contact Trader
+                </Button>
+                {canDelete && (
+                  <Button 
+                    variant="outline" 
+                    onClick={onDelete}
+                    disabled={deleteLoading}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    {deleteLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-2" />
+                    )}
+                    {deleteLoading ? 'Deleting...' : 'Delete'}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function TradingHub() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -151,11 +383,18 @@ export function TradingHub() {
     description: ''
   });
 
-  // Image upload states
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  // Image upload states (for creating/editing trades)
+  const [uploadSelectedImages, setUploadSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
-  const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
+  const [editUploadSelectedImages, setEditUploadSelectedImages] = useState<File[]>([]);
   const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]);
+
+  // Modal states (for viewing images and trade details)
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [isTradeDetailsOpen, setIsTradeDetailsOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [modalSelectedImages, setModalSelectedImages] = useState<{ image_url: string; uploaded_at: string }[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const loadTrades = useCallback(async () => {
     try {
@@ -214,11 +453,11 @@ export function TradingHub() {
     { value: 'cancelled', label: 'Cancelled' }
   ];
 
-  // Image handling functions
+  // Update image handling functions to use the renamed variables
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
-    if (files.length + selectedImages.length > 5) {
+    if (files.length + uploadSelectedImages.length > 5) {
       setError('Maximum 5 images allowed');
       return;
     }
@@ -237,7 +476,7 @@ export function TradingHub() {
     });
 
     if (validFiles.length > 0) {
-      setSelectedImages(prev => [...prev, ...validFiles]);
+      setUploadSelectedImages(prev => [...prev, ...validFiles]);
       
       // Create preview URLs
       validFiles.forEach(file => {
@@ -251,14 +490,14 @@ export function TradingHub() {
   };
 
   const handleRemoveImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setUploadSelectedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
-    if (files.length + editSelectedImages.length > 5) {
+    if (files.length + editUploadSelectedImages.length > 5) {
       setError('Maximum 5 images allowed');
       return;
     }
@@ -277,7 +516,7 @@ export function TradingHub() {
     });
 
     if (validFiles.length > 0) {
-      setEditSelectedImages(prev => [...prev, ...validFiles]);
+      setEditUploadSelectedImages(prev => [...prev, ...validFiles]);
       
       // Create preview URLs
       validFiles.forEach(file => {
@@ -291,10 +530,78 @@ export function TradingHub() {
   };
 
   const handleRemoveEditImage = (index: number) => {
-    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setEditUploadSelectedImages(prev => prev.filter((_, i) => i !== index));
     setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Update modal functions to use the renamed variables
+  const handleTradeClick = (trade: Trade) => {
+    setSelectedTrade(trade);
+    setIsTradeDetailsOpen(true);
+  };
+
+  const handleImageClick = (images: { image_url: string; uploaded_at: string }[], index: number) => {
+    setModalSelectedImages(images);
+    setCurrentImageIndex(index);
+    setIsImageModalOpen(true);
+  };
+
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % modalSelectedImages.length);
+  };
+
+  const handlePreviousImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + modalSelectedImages.length) % modalSelectedImages.length);
+  };
+
+  const handleEditFromModal = () => {
+    if (selectedTrade) {
+      setIsTradeDetailsOpen(false);
+      handleEditTrade(selectedTrade);
+    }
+  };
+
+  const handleDeleteFromModal = () => {
+    if (selectedTrade) {
+      setIsTradeDetailsOpen(false);
+      handleDeleteTrade(selectedTrade.trade_id, selectedTrade.item_offered);
+    }
+  };
+
+  const canEditTrade = (trade: Trade): boolean => {
+    if (!currentUser) return false;
+    return currentUser.id === trade.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  const canDeleteTrade = (trade: Trade): boolean => {
+    if (!currentUser) return false;
+    return currentUser.id === trade.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  const handleDeleteTrade = async (tradeId: string, tradeTitle: string) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the trade "${tradeTitle}"?`);
+    if (!confirmed) return;
+
+    try {
+      setDeleteLoading(tradeId);
+      await apiService.deleteTrade(tradeId);
+      
+      setTrades(prev => prev.filter(trade => trade.trade_id !== tradeId));
+      
+      toast.success('Trade deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete trade:', error);
+      toast.error('Failed to delete trade');
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  // Update create trade function
   const handleCreateTrade = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -312,13 +619,13 @@ export function TradingHub() {
       setCreateLoading(true);
       setError('');
       
-      console.log('Creating trade with images:', selectedImages.length);
+      console.log('Creating trade with images:', uploadSelectedImages.length);
       
       await apiService.createTrade({
         itemOffered: newTrade.itemOffered,
         itemRequested: newTrade.itemRequested,
         description: newTrade.description
-      }, selectedImages);
+      }, uploadSelectedImages);
       
       // Reset form
       setIsCreateDialogOpen(false);
@@ -327,7 +634,7 @@ export function TradingHub() {
         itemRequested: '',
         description: ''
       });
-      setSelectedImages([]);
+      setUploadSelectedImages([]);
       setImagePreviewUrls([]);
       
       // Reload trades to show the new one
@@ -362,6 +669,7 @@ export function TradingHub() {
     }
   };
 
+  // Update edit trade function
   const handleEditTrade = (trade: Trade) => {
     if (!currentUser || currentUser.id !== trade.user_id) {
       toast.error('You can only edit your own trades');
@@ -374,7 +682,7 @@ export function TradingHub() {
       itemRequested: trade.item_requested || '',
       description: trade.description || ''
     });
-    setEditSelectedImages([]);
+    setEditUploadSelectedImages([]);
     setEditImagePreviewUrls([]);
     setIsEditDialogOpen(true);
   };
@@ -398,7 +706,7 @@ export function TradingHub() {
         itemOffered: editTrade.itemOffered,
         itemRequested: editTrade.itemRequested,
         description: editTrade.description
-      }, editSelectedImages);
+      }, editUploadSelectedImages);
       
       // Reset form
       setIsEditDialogOpen(false);
@@ -408,7 +716,7 @@ export function TradingHub() {
         itemRequested: '',
         description: ''
       });
-      setEditSelectedImages([]);
+      setEditUploadSelectedImages([]);
       setEditImagePreviewUrls([]);
       
       // Reload trades to show the updated one
@@ -442,66 +750,6 @@ export function TradingHub() {
     }
   };
 
-  const canEditTrade = (trade: Trade) => {
-    console.log('canEditTrade check:', {
-      currentUser,
-      currentUserId: currentUser?.id,
-      tradeUserId: trade.user_id,
-      match: currentUser && currentUser.id === trade.user_id
-    });
-    return currentUser && currentUser.id === trade.user_id;
-  };
-
-  const canDeleteTrade = (trade: Trade) => {
-    // Trade owner, moderator, or admin can delete
-    if (!currentUser) return false;
-    return currentUser.id === trade.user_id || 
-           currentUser.role === 'admin' || 
-           currentUser.role === 'moderator';
-  };
-
-  const handleDeleteTrade = async (tradeId: string, itemOffered: string) => {
-    if (!confirm(`Are you sure you want to delete the trade "${itemOffered}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setDeleteLoading(tradeId);
-      setError('');
-      
-      await apiService.deleteTrade(tradeId);
-      
-      // Reload trades to remove the deleted trade
-      await loadTrades();
-      
-      toast.success('Trade deleted successfully', {
-        description: 'The trade has been removed from the trading hub.'
-      });
-    } catch (err) {
-      console.error('Failed to delete trade:', err);
-      let errorMessage = 'Failed to delete trade';
-      
-      if (err instanceof Error) {
-        if (err.message.includes('network') || err.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (err.message.includes('403')) {
-          errorMessage = 'You do not have permission to delete this trade.';
-        } else if (err.message.includes('404')) {
-          errorMessage = 'Trade not found. It may have already been deleted.';
-        } else {
-          errorMessage = err.message;
-        }
-      }
-      
-      setError(errorMessage);
-      toast.error('Failed to delete trade', {
-        description: errorMessage
-      });
-    } finally {
-      setDeleteLoading(null);
-    }
-  };
-
   const filteredTrades = trades.filter((trade) => {
     const matchesSearch = searchTerm === '' || 
       trade.item_offered?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -510,6 +758,7 @@ export function TradingHub() {
     return matchesSearch;
   });
 
+  // Update the image upload sections in the JSX to use the renamed variables
   return (
     <div className="flex-1 overflow-hidden">
       {/* Header */}
@@ -601,23 +850,23 @@ export function TradingHub() {
                       onChange={handleImageSelect}
                       className="hidden"
                       id="image-upload"
-                      disabled={selectedImages.length >= 5}
+                      disabled={uploadSelectedImages.length >= 5}
                     />
                     <label
                       htmlFor="image-upload"
                       className={`cursor-pointer flex flex-col items-center gap-2 ${
-                        selectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                        uploadSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       <Upload className="w-8 h-8 text-gray-400" />
                       <span className="text-sm text-gray-600 dark:text-gray-300">
-                        {selectedImages.length >= 5 
+                        {uploadSelectedImages.length >= 5 
                           ? 'Maximum 5 images reached' 
                           : 'Click to upload images or drag and drop'
                         }
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        PNG, JPG, GIF up to 5MB each • {selectedImages.length}/5 selected
+                        PNG, JPG, GIF up to 5MB each • {uploadSelectedImages.length}/5 selected
                       </span>
                     </label>
                   </div>
@@ -630,21 +879,18 @@ export function TradingHub() {
                           {imagePreviewUrls.length} image{imagePreviewUrls.length !== 1 ? 's' : ''} selected
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {imagePreviewUrls.map((url, index) => (
                           <div key={index} className="relative group">
-                            <div className="aspect-square border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                              <ImageDisplay
-                                src={url}
-                                alt={`Preview ${index + 1}`}
-                                className="w-full h-full"
-                              />
-                            </div>
+                            <img
+                              src={url}
+                              alt={`Preview ${index + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border"
+                            />
                             <button
                               type="button"
                               onClick={() => handleRemoveImage(index)}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Remove image"
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -754,28 +1000,28 @@ export function TradingHub() {
                       onChange={handleEditImageSelect}
                       className="hidden"
                       id="edit-image-upload"
-                      disabled={editSelectedImages.length >= 5}
+                      disabled={editUploadSelectedImages.length >= 5}
                     />
                     <label
                       htmlFor="edit-image-upload"
                       className={`cursor-pointer flex flex-col items-center gap-2 ${
-                        editSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                        editUploadSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       <Upload className="w-8 h-8 text-gray-400" />
                       <span className="text-sm text-gray-600 dark:text-gray-300">
-                        {editSelectedImages.length >= 5 
+                        {editUploadSelectedImages.length >= 5 
                           ? 'Maximum 5 images reached' 
                           : 'Click to upload images or drag and drop'
                         }
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        PNG, JPG, GIF up to 5MB each • {editSelectedImages.length}/5 selected
+                        PNG, JPG, GIF up to 5MB each • {editUploadSelectedImages.length}/5 selected
                       </span>
                     </label>
                   </div>
 
-                  {/* Image Previews */}
+                  {/* Edit Image Previews */}
                   {editImagePreviewUrls.length > 0 && (
                     <div className="space-y-2 mt-4">
                       <div className="flex items-center gap-2">
@@ -783,21 +1029,18 @@ export function TradingHub() {
                           {editImagePreviewUrls.length} image{editImagePreviewUrls.length !== 1 ? 's' : ''} selected
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {editImagePreviewUrls.map((url, index) => (
                           <div key={index} className="relative group">
-                            <div className="aspect-square border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                              <ImageDisplay
-                                src={url}
-                                alt={`Preview ${index + 1}`}
-                                className="w-full h-full"
-                              />
-                            </div>
+                            <img
+                              src={url}
+                              alt={`Preview ${index + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border"
+                            />
                             <button
                               type="button"
                               onClick={() => handleRemoveEditImage(index)}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Remove image"
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -952,21 +1195,27 @@ export function TradingHub() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4" onClick={() => handleTradeClick(trade)}>
                     {/* Trade Images */}
                     {trade.images && trade.images.length > 0 && (
-                      <div className="relative">
+                      <div className="relative" onClick={(e) => {
+                        e.stopPropagation();
+                        handleImageClick(trade.images!, 0);
+                      }}>
                         <ImageDisplay
                           src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${trade.images[0].image_url.split('/').pop()}`}
                           alt={`${trade.item_offered} - Trade item`}
-                          className="w-full h-32 object-cover rounded-lg"
+                          className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
                         />
                         {trade.images.length > 1 && (
                           <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
-                            <Upload className="w-3 h-3 inline mr-1" />
-                            +{trade.images.length - 1} more
+                            <Eye className="w-3 h-3 inline mr-1" />
+                            {trade.images.length} images
                           </div>
                         )}
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center opacity-0 hover:opacity-100">
+                          <Eye className="w-6 h-6 text-white" />
+                        </div>
                       </div>
                     )}
 
@@ -1015,7 +1264,7 @@ export function TradingHub() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
                       {canEditTrade(trade) ? (
                         <>
                           <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
@@ -1054,7 +1303,13 @@ export function TradingHub() {
                             <MessageSquare className="w-3 h-3 mr-1" />
                             Contact
                           </Button>
-                          <Button variant="outline" size="sm" className="flex-1">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1"
+                            onClick={() => handleTradeClick(trade)}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
                             View Details
                           </Button>
                           {canDeleteTrade(trade) && (
@@ -1095,6 +1350,29 @@ export function TradingHub() {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <TradeDetailsModal
+        trade={selectedTrade}
+        isOpen={isTradeDetailsOpen}
+        onClose={() => setIsTradeDetailsOpen(false)}
+        onEdit={handleEditFromModal}
+        onDelete={handleDeleteFromModal}
+        canEdit={selectedTrade ? canEditTrade(selectedTrade) : false}
+        canDelete={selectedTrade ? canDeleteTrade(selectedTrade) : false}
+        deleteLoading={selectedTrade ? deleteLoading === selectedTrade.trade_id : false}
+      />
+
+      <ImageModal
+        images={modalSelectedImages}
+        currentIndex={currentImageIndex}
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        onNext={handleNextImage}
+        onPrevious={handlePreviousImage}
+      />
+
+      {/* ...existing create and edit dialogs... */}
     </div>
   );
 }
