@@ -18,7 +18,9 @@ import {
   Filter,
   Gift,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  ImageIcon
 } from 'lucide-react';
 
 // Type definitions
@@ -86,9 +88,63 @@ interface DashboardPost {
   items?: string[];
   wantedItems?: string[];
   offering?: string;
-  image?: string;
+  images?: Array<{ url: string; type: 'trade' | 'forum' }>;
   category?: string;
   status?: string;
+}
+
+// Enhanced Image Display Component
+interface ImageDisplayProps {
+  src: string;
+  alt: string;
+  className?: string;
+  fallback?: React.ReactNode;
+}
+
+function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  const handleImageError = () => {
+    console.error('Image failed to load:', src);
+    setImageLoading(false);
+    setImageError(true);
+  };
+
+  if (imageError) {
+    return fallback || (
+      <div className={`bg-gray-100 dark:bg-gray-800 flex items-center justify-center ${className}`}>
+        <div className="text-center text-gray-400">
+          <ImageIcon className="w-8 h-8 mx-auto mb-1" />
+          <span className="text-xs">Image unavailable</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      {imageLoading && (
+        <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center rounded">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
+      />
+    </div>
+  );
 }
 
 export function Dashboard() {
@@ -102,6 +158,7 @@ export function Dashboard() {
     activeTrades: 0,
     liveEvents: 0
   });
+
   // Load data from APIs
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -141,6 +198,15 @@ export function Dashboard() {
               console.warn('Invalid date format for trade:', trade.trade_id);
             }
 
+            // Process trade images with correct URLs
+            let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
+            if (trade.images && trade.images.length > 0) {
+              images = trade.images.map(img => ({
+                url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${img.image_url.split('/').pop()}`,
+                type: 'trade' as const
+              }));
+            }
+
             allPosts.push({
               id: trade.trade_id,
               type: 'trade',
@@ -156,7 +222,7 @@ export function Dashboard() {
               items: [trade.item_offered],
               wantedItems: trade.item_requested ? [trade.item_requested] : undefined,
               status: trade.status,
-              image: trade.images && trade.images.length > 0 ? `http://localhost:5000${trade.images[0].image_url}` : undefined,
+              images,
               comments: Math.floor(Math.random() * 20),
               likes: Math.floor(Math.random() * 50)
             });
@@ -183,6 +249,15 @@ export function Dashboard() {
               console.warn('Invalid date format for forum post:', post.post_id);
             }
 
+            // Process forum images with correct URLs
+            let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
+            if (post.images && post.images.length > 0) {
+              images = post.images.map(img => ({
+                url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${img.filename}`,
+                type: 'forum' as const
+              }));
+            }
+
             allPosts.push({
               id: post.post_id,
               type: 'forum',
@@ -197,7 +272,7 @@ export function Dashboard() {
               comments: post.commentCount || 0,
               likes: post.upvotes || 0,
               category: post.category,
-              image: post.images && post.images.length > 0 ? `http://localhost:5000/uploads/forum/${post.images[0].filename}` : undefined
+              images
             });
           });
         }
@@ -404,7 +479,7 @@ export function Dashboard() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           {filteredPosts.map((post) => (
-            <Card key={post.id} className="relative">
+            <Card key={post.id} className="relative hover:shadow-lg transition-shadow duration-200">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -462,16 +537,49 @@ export function Dashboard() {
                   <p className="text-muted-foreground">{post.description}</p>
                 </div>
 
-                {post.image && (
-                  <div className="rounded-lg overflow-hidden">
-                    <img 
-                      src={post.image} 
-                      alt="Trade item"
-                      className="w-full h-48 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
+                {/* Enhanced Image Display */}
+                {post.images && post.images.length > 0 && (
+                  <div className="space-y-3">
+                    {post.images.length === 1 ? (
+                      <div className="rounded-lg overflow-hidden">
+                        <ImageDisplay
+                          src={post.images[0].url}
+                          alt={`${post.type} image`}
+                          className="w-full h-48"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <ImageIcon className="w-4 h-4" />
+                          <span>{post.images.length} images</span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {post.images.slice(0, 6).map((image, index) => (
+                            <div key={index} className="aspect-square overflow-hidden rounded-lg border hover:shadow-md transition-shadow cursor-pointer group">
+                              <div className="relative w-full h-full">
+                                <ImageDisplay
+                                  src={image.url}
+                                  alt={`${post.type} image ${index + 1}`}
+                                  className="w-full h-full"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                  <Eye className="w-5 h-5 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {post.images.length > 6 && (
+                            <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg border flex items-center justify-center cursor-pointer hover:shadow-md transition-shadow">
+                              <div className="text-center text-gray-500 dark:text-gray-400">
+                                <ImageIcon className="w-6 h-6 mx-auto mb-1" />
+                                <span className="text-xs">+{post.images.length - 6} more</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
