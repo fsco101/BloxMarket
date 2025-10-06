@@ -9,7 +9,6 @@ import { Dialog, DialogContent } from './ui/dialog';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import { 
-  Heart, 
   MessageSquare, 
   Flag, 
   Star, 
@@ -46,6 +45,9 @@ interface Trade {
   credibility_score: number;
   user_id: string;
   images?: Array<{ image_url: string; uploaded_at: string }>;
+  upvotes?: number;
+  downvotes?: number;
+  comment_count?: number;
 }
 
 interface ForumPost {
@@ -94,7 +96,8 @@ interface DashboardPost {
   };
   timestamp: string;
   comments?: number;
-  likes?: number;
+  upvotes?: number;
+  downvotes?: number;
   items?: string[];
   wantedItems?: string[];
   offering?: string;
@@ -234,10 +237,9 @@ function ImageViewer({ images, currentIndex, onNext, onPrevious }: ImageViewerPr
   );
 }
 
-// New Post Modal Component
+// New Post Modal Component with unified voting system
 function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [liked, setLiked] = useState(false);
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -260,20 +262,19 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
 
     try {
       setLoadingComments(true);
-      console.log('Loading post data for:', post.id, post.type); // Debug log
+      console.log('Loading post data for:', post.id, post.type);
       
-      // Load comments based on post type
-      let commentsData = [];
+      // Load comments and votes based on post type
       if (post.type === 'forum') {
         try {
           const response = await apiService.getForumPost(post.id);
-          console.log('Forum post response:', response); // Debug log
+          console.log('Forum post response:', response);
           
-          commentsData = response.comments || [];
+          const commentsData = response.comments || [];
+          setComments(commentsData);
           setUpvotes(response.upvotes || 0);
           setDownvotes(response.downvotes || 0);
           
-          // Check if user has already voted on this post
           if (response.userVote) {
             setUserVote(response.userVote);
             setHasVoted(true);
@@ -283,24 +284,58 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
           }
         } catch (apiError) {
           console.error('Failed to load forum post:', apiError);
-          // Don't throw here, just show empty state
-          commentsData = [];
+          setComments([]);
           setUpvotes(0);
           setDownvotes(0);
           setUserVote(null);
           setHasVoted(false);
         }
       } else if (post.type === 'trade') {
-        // For trades, you might want to implement a trade comments system
-        commentsData = [];
-        setUpvotes(post.likes || 0);
-        setDownvotes(0);
+        try {
+          // Load trade comments and votes
+          const [commentsResponse, votesResponse] = await Promise.allSettled([
+            apiService.getTradeComments(post.id),
+            apiService.getTradeVotes(post.id)
+          ]);
+
+          // Handle comments
+          if (commentsResponse.status === 'fulfilled') {
+            setComments(commentsResponse.value.comments || []);
+          } else {
+            console.error('Failed to load trade comments:', commentsResponse.reason);
+            setComments([]);
+          }
+
+          // Handle votes
+          if (votesResponse.status === 'fulfilled') {
+            setUpvotes(votesResponse.value.upvotes || 0);
+            setDownvotes(votesResponse.value.downvotes || 0);
+            setUserVote(votesResponse.value.userVote || null);
+            setHasVoted(votesResponse.value.userVote !== null);
+          } else {
+            console.error('Failed to load trade votes:', votesResponse.reason);
+            setUpvotes(post.upvotes || 0);
+            setDownvotes(post.downvotes || 0);
+            setUserVote(null);
+            setHasVoted(false);
+          }
+        } catch (apiError) {
+          console.error('Failed to load trade data:', apiError);
+          setComments([]);
+          setUpvotes(post.upvotes || 0);
+          setDownvotes(post.downvotes || 0);
+          setUserVote(null);
+          setHasVoted(false);
+        }
+      } else {
+        // For events, use default values
+        setComments([]);
+        setUpvotes(post.upvotes || 0);
+        setDownvotes(post.downvotes || 0);
         setUserVote(null);
         setHasVoted(false);
       }
       
-      setComments(commentsData);
-      console.log('Comments loaded:', commentsData.length); // Debug log
     } catch (error) {
       console.error('Failed to load post data:', error);
       toast.error('Failed to load post data');
@@ -314,25 +349,33 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
 
     try {
       setVotingLoading(true);
-      console.log('Attempting upvote for post:', post.id); // Debug log
+      console.log('Attempting upvote for post:', post.id, post.type);
       
+      let response;
       if (post.type === 'forum') {
-        const response = await apiService.voteForumPost(post.id, 'up');
-        console.log('Upvote response:', response); // Debug log
-        
-        // Update local state based on server response
-        setUpvotes(response.upvotes);
-        setDownvotes(response.downvotes);
-        setUserVote(response.userVote);
-        setHasVoted(response.userVote !== null);
-        
-        if (response.userVote === 'up') {
-          toast.success('Upvoted!');
-        } else if (response.userVote === null) {
-          toast.success('Vote removed!');
-        } else {
-          toast.success('Changed to upvote!');
-        }
+        response = await apiService.voteForumPost(post.id, 'up');
+      } else if (post.type === 'trade') {
+        response = await apiService.voteTradePost(post.id, 'up');
+      } else {
+        // For events, just show a message
+        toast.info('Voting not available for events');
+        return;
+      }
+      
+      console.log('Upvote response:', response);
+      
+      // Update local state based on server response
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      setHasVoted(response.userVote !== null);
+      
+      if (response.userVote === 'up') {
+        toast.success('Upvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to upvote!');
       }
     } catch (error) {
       console.error('Failed to upvote:', error);
@@ -353,25 +396,33 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
 
     try {
       setVotingLoading(true);
-      console.log('Attempting downvote for post:', post.id); // Debug log
+      console.log('Attempting downvote for post:', post.id, post.type);
       
+      let response;
       if (post.type === 'forum') {
-        const response = await apiService.voteForumPost(post.id, 'down');
-        console.log('Downvote response:', response); // Debug log
-        
-        // Update local state based on server response
-        setUpvotes(response.upvotes);
-        setDownvotes(response.downvotes);
-        setUserVote(response.userVote);
-        setHasVoted(response.userVote !== null);
-        
-        if (response.userVote === 'down') {
-          toast.success('Downvoted!');
-        } else if (response.userVote === null) {
-          toast.success('Vote removed!');
-        } else {
-          toast.success('Changed to downvote!');
-        }
+        response = await apiService.voteForumPost(post.id, 'down');
+      } else if (post.type === 'trade') {
+        response = await apiService.voteTradePost(post.id, 'down');
+      } else {
+        // For events, just show a message
+        toast.info('Voting not available for events');
+        return;
+      }
+      
+      console.log('Downvote response:', response);
+      
+      // Update local state based on server response
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      setHasVoted(response.userVote !== null);
+      
+      if (response.userVote === 'down') {
+        toast.success('Downvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to downvote!');
       }
     } catch (error) {
       console.error('Failed to downvote:', error);
@@ -392,14 +443,15 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
 
     try {
       setSubmittingComment(true);
-      console.log('Attempting to add comment:', { postId: post.id, content: comment }); // Debug log
+      console.log('Attempting to add comment:', { postId: post.id, content: comment });
       
       let newComment;
       if (post.type === 'forum') {
         newComment = await apiService.addForumComment(post.id, comment);
-        console.log('Comment added successfully:', newComment); // Debug log
       } else if (post.type === 'trade') {
-        // Implement trade comments if needed
+        newComment = await apiService.addTradeComment(post.id, comment);
+      } else {
+        // For events, create a mock comment for now
         newComment = {
           comment_id: Date.now().toString(),
           content: comment,
@@ -408,6 +460,8 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
           credibility_score: 100
         };
       }
+      
+      console.log('Comment added successfully:', newComment);
       
       if (newComment) {
         setComments(prev => [newComment, ...prev]);
@@ -459,12 +513,8 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
     }
   };
 
-  const handleLike = () => {
-    setLiked(!liked);
-  };
-
   const handleUserClick = () => {
-    onUserClick(post.id); // Pass the user ID or post ID to identify the user
+    onUserClick(post.id);
     onClose();
   };
 
@@ -572,58 +622,44 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
               )}
             </div>
 
-            {/* Actions */}
+            {/* Actions - Unified voting system for all post types */}
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
-                  {post.type === 'forum' ? (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="lg"
-                        onClick={handleUpvote}
-                        disabled={votingLoading}
-                        className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground'} hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950 text-base px-4 py-3 relative`}
-                        title={userVote === 'up' ? 'Click to remove upvote' : userVote === 'down' ? 'Change to upvote' : 'Upvote this post'}
-                      >
-                        <ArrowUp className={`w-6 h-6 mr-3 ${userVote === 'up' ? 'fill-current' : ''}`} />
-                        {upvotes}
-                        {votingLoading && (
-                          <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="lg"
-                        onClick={handleDownvote}
-                        disabled={votingLoading}
-                        className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground'} hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 text-base px-4 py-3 relative`}
-                        title={userVote === 'down' ? 'Click to remove downvote' : userVote === 'up' ? 'Change to downvote' : 'Downvote this post'}
-                      >
-                        <ArrowDown className={`w-6 h-6 mr-3 ${userVote === 'down' ? 'fill-current' : ''}`} />
-                        {downvotes}
-                        {votingLoading && (
-                          <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
-                        )}
-                      </Button>
-                      
-                      {/* Vote status indicator */}
-                      {hasVoted && (
-                        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
-                          {userVote === 'up' ? '✓ Upvoted' : '✓ Downvoted'}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="lg"
-                      onClick={handleLike}
-                      className={`${liked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500 text-base px-4 py-3`}
-                    >
-                      <Heart className={`w-6 h-6 mr-3 ${liked ? 'fill-current' : ''}`} />
-                      {(post.likes || 0) + (liked ? 1 : 0)}
-                    </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={handleUpvote}
+                    disabled={votingLoading || post.type === 'event'}
+                    className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground'} hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950 text-base px-4 py-3 relative`}
+                    title={userVote === 'up' ? 'Click to remove upvote' : userVote === 'down' ? 'Change to upvote' : 'Upvote this post'}
+                  >
+                    <ArrowUp className={`w-6 h-6 mr-3 ${userVote === 'up' ? 'fill-current' : ''}`} />
+                    {upvotes}
+                    {votingLoading && (
+                      <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={handleDownvote}
+                    disabled={votingLoading || post.type === 'event'}
+                    className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground'} hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 text-base px-4 py-3 relative`}
+                    title={userVote === 'down' ? 'Click to remove downvote' : userVote === 'up' ? 'Change to downvote' : 'Downvote this post'}
+                  >
+                    <ArrowDown className={`w-6 h-6 mr-3 ${userVote === 'down' ? 'fill-current' : ''}`} />
+                    {downvotes}
+                    {votingLoading && (
+                      <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
+                    )}
+                  </Button>
+                  
+                  {/* Vote status indicator */}
+                  {hasVoted && (
+                    <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
+                      {userVote === 'up' ? '✓ Upvoted' : '✓ Downvoted'}
+                    </div>
                   )}
                   
                   <Button variant="ghost" size="lg" className="text-muted-foreground text-base px-4 py-3">
@@ -750,25 +786,17 @@ export function Dashboard() {
   const [selectedPost, setSelectedPost] = useState<DashboardPost | null>(null);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
-  // Add the missing handleUserClick function
   const handleUserClick = (userId: string) => {
-    // For now, show a toast message. Later you can implement a user profile modal
     toast.info(`Viewing profile for user: ${userId}`, {
       description: 'User profile functionality coming soon!'
     });
-    
-    // Alternative: You could open a user profile modal here
-    // setSelectedUserId(userId);
-    // setIsUserProfileModalOpen(true);
   };
 
-  // Add the handlePostClick function
   const handlePostClick = (post: DashboardPost) => {
     setSelectedPost(post);
     setIsPostModalOpen(true);
   };
 
-  // Add the handleCloseModal function
   const handleCloseModal = () => {
     setIsPostModalOpen(false);
     setSelectedPost(null);
@@ -792,13 +820,12 @@ export function Dashboard() {
         let activeTradeCount = 0;
         let activeEventCount = 0;
 
-        // Process trades data
+        // Process trades data with upvote/downvote system
         if (tradesData.status === 'fulfilled' && tradesData.value?.trades) {
           const trades: Trade[] = tradesData.value.trades;
           activeTradeCount = trades.filter(trade => trade.status === 'open').length;
           
           trades.forEach(trade => {
-            // Safely create timestamp
             let timestamp = 'Recently';
             try {
               if (trade.created_at) {
@@ -813,7 +840,6 @@ export function Dashboard() {
               console.warn('Invalid date format for trade:', trade.trade_id);
             }
 
-            // Process trade images with correct URLs
             let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
             if (trade.images && trade.images.length > 0) {
               images = trade.images.map(img => ({
@@ -838,18 +864,18 @@ export function Dashboard() {
               wantedItems: trade.item_requested ? [trade.item_requested] : undefined,
               status: trade.status,
               images,
-              comments: Math.floor(Math.random() * 20),
-              likes: Math.floor(Math.random() * 50)
+              comments: trade.comment_count || 0,
+              upvotes: trade.upvotes || 0,
+              downvotes: trade.downvotes || 0
             });
           });
         }
 
-        // Process forum posts data
+        // Process forum posts data (unchanged)
         if (forumData.status === 'fulfilled' && Array.isArray(forumData.value)) {
           const forumPosts: ForumPost[] = forumData.value;
           
           forumPosts.forEach(post => {
-            // Safely create timestamp
             let timestamp = 'Recently';
             try {
               if (post.created_at) {
@@ -864,7 +890,6 @@ export function Dashboard() {
               console.warn('Invalid date format for forum post:', post.post_id);
             }
 
-            // Process forum images with correct URLs
             let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
             if (post.images && post.images.length > 0) {
               images = post.images.map(img => ({
@@ -885,14 +910,15 @@ export function Dashboard() {
               },
               timestamp,
               comments: post.commentCount || 0,
-              likes: post.upvotes || 0,
+              upvotes: post.upvotes || 0,
+              downvotes: post.downvotes || 0,
               category: post.category,
               images
             });
           });
         }
 
-        // Process events data
+        // Process events data (unchanged)
         if (eventsData.status === 'fulfilled' && Array.isArray(eventsData.value)) {
           const events: Event[] = eventsData.value;
           activeEventCount = events.filter(event => 
@@ -900,7 +926,6 @@ export function Dashboard() {
           ).length;
           
           events.forEach(event => {
-            // Safely create timestamp
             let timestamp = 'Recently';
             try {
               if (event.createdAt) {
@@ -929,32 +954,29 @@ export function Dashboard() {
               },
               timestamp,
               comments: Math.floor(Math.random() * 100),
-              likes: Math.floor(Math.random() * 200)
+              upvotes: Math.floor(Math.random() * 200),
+              downvotes: Math.floor(Math.random() * 50)
             });
           });
         }
 
-        // Sort posts by timestamp (newest first) with better error handling
+        // Sort posts by timestamp
         allPosts.sort((a, b) => {
           try {
-            // Try to parse as dates first
             const dateA = new Date(a.timestamp);
             const dateB = new Date(b.timestamp);
             
-            // If both are valid dates, sort by them
             if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
               return dateB.getTime() - dateA.getTime();
             }
             
-            // Fallback to string comparison
             return a.timestamp.localeCompare(b.timestamp);
           } catch {
-            // If all else fails, maintain current order
             return 0;
           }
         });
         
-        // Calculate real active traders from trades data
+        // Calculate active traders
         let activeTraderCount = 0;
         if (tradesData.status === 'fulfilled' && tradesData.value?.trades) {
           const uniqueTraders = new Set();
@@ -985,7 +1007,7 @@ export function Dashboard() {
     loadDashboardData();
   }, []);
 
-  // Helper functions - add these before the return statement
+  // Helper functions
   const getPostTypeIcon = (type: string) => {
     switch (type) {
       case 'trade': return <TrendingUp className="w-4 h-4" />;
@@ -1266,12 +1288,16 @@ export function Dashboard() {
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions - Updated to show upvotes/downvotes for all posts */}
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1 text-muted-foreground">
-                      <Heart className="w-4 h-4" />
-                      <span>{post.likes}</span>
+                      <ArrowUp className="w-4 h-4 text-green-600" />
+                      <span>{post.upvotes || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <ArrowDown className="w-4 h-4 text-red-600" />
+                      <span>{post.downvotes || 0}</span>
                     </div>
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <MessageSquare className="w-4 h-4" />
