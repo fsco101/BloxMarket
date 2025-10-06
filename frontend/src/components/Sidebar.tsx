@@ -37,9 +37,9 @@ export function Sidebar() {
   ];
 
   return (
-   <div className="fixed top-0 left-0 w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col z-40">
+    <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0 flex-shrink-0">
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4 border-b border-sidebar-border flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">BM</span>
@@ -52,7 +52,7 @@ export function Sidebar() {
       </div>
 
       {/* User Info */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4 border-b border-sidebar-border flex-shrink-0">
         <div className="flex items-center gap-3">
           <Avatar className="w-10 h-10">
             <AvatarImage src={(user as any)?.avatar || "https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"} />
@@ -79,27 +79,29 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-2">
-        {menuItems.map(({ id, label, icon: Icon }) => (
-          <Button
-            key={id}
-            variant={currentPage === id ? "secondary" : "ghost"}
-            className={`w-full justify-start mb-1 h-10 ${
-              currentPage === id 
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-            }`}
-            onClick={() => setCurrentPage(id)}
-          >
-            <Icon className="w-4 h-4 mr-3" />
-            {label}
-          </Button>
-        ))}
+      {/* Navigation - Scrollable */}
+      <nav className="flex-1 p-2 overflow-y-auto">
+        <div className="space-y-1">
+          {menuItems.map(({ id, label, icon: Icon }) => (
+            <Button
+              key={id}
+              variant={currentPage === id ? "secondary" : "ghost"}
+              className={`w-full justify-start h-10 ${
+                currentPage === id 
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              }`}
+              onClick={() => setCurrentPage(id)}
+            >
+              <Icon className="w-4 h-4 mr-3" />
+              {label}
+            </Button>
+          ))}
+        </div>
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border space-y-3">
+      <div className="p-4 border-t border-sidebar-border space-y-3 flex-shrink-0">
         {/* Theme Toggle */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

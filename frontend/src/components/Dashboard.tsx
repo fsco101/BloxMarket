@@ -28,7 +28,9 @@ import {
   Send,
   MoreHorizontal,
   Share,
-  User
+  User,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 // Type definitions
@@ -237,10 +239,192 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [liked, setLiked] = useState(false);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState([
-    { id: 1, user: 'JohnDoe', content: 'Great trade! Interested!', time: '2m ago', avatar: 'J' },
-    { id: 2, user: 'TraderGirl', content: 'Is this still available?', time: '5m ago', avatar: 'T' },
-  ]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [upvotes, setUpvotes] = useState(0);
+  const [downvotes, setDownvotes] = useState(0);
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [votingLoading, setVotingLoading] = useState(false);
+  const [hasVoted, setHasVoted] = useState(false);
+
+  // Load comments and votes when modal opens
+  useEffect(() => {
+    if (isOpen && post) {
+      loadPostData();
+    }
+  }, [isOpen, post]);
+
+  const loadPostData = async () => {
+    if (!post) return;
+
+    try {
+      setLoadingComments(true);
+      console.log('Loading post data for:', post.id, post.type); // Debug log
+      
+      // Load comments based on post type
+      let commentsData = [];
+      if (post.type === 'forum') {
+        try {
+          const response = await apiService.getForumPost(post.id);
+          console.log('Forum post response:', response); // Debug log
+          
+          commentsData = response.comments || [];
+          setUpvotes(response.upvotes || 0);
+          setDownvotes(response.downvotes || 0);
+          
+          // Check if user has already voted on this post
+          if (response.userVote) {
+            setUserVote(response.userVote);
+            setHasVoted(true);
+          } else {
+            setUserVote(null);
+            setHasVoted(false);
+          }
+        } catch (apiError) {
+          console.error('Failed to load forum post:', apiError);
+          // Don't throw here, just show empty state
+          commentsData = [];
+          setUpvotes(0);
+          setDownvotes(0);
+          setUserVote(null);
+          setHasVoted(false);
+        }
+      } else if (post.type === 'trade') {
+        // For trades, you might want to implement a trade comments system
+        commentsData = [];
+        setUpvotes(post.likes || 0);
+        setDownvotes(0);
+        setUserVote(null);
+        setHasVoted(false);
+      }
+      
+      setComments(commentsData);
+      console.log('Comments loaded:', commentsData.length); // Debug log
+    } catch (error) {
+      console.error('Failed to load post data:', error);
+      toast.error('Failed to load post data');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleUpvote = async () => {
+    if (!post || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Attempting upvote for post:', post.id); // Debug log
+      
+      if (post.type === 'forum') {
+        const response = await apiService.voteForumPost(post.id, 'up');
+        console.log('Upvote response:', response); // Debug log
+        
+        // Update local state based on server response
+        setUpvotes(response.upvotes);
+        setDownvotes(response.downvotes);
+        setUserVote(response.userVote);
+        setHasVoted(response.userVote !== null);
+        
+        if (response.userVote === 'up') {
+          toast.success('Upvoted!');
+        } else if (response.userVote === null) {
+          toast.success('Vote removed!');
+        } else {
+          toast.success('Changed to upvote!');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to upvote:', error);
+      if (error.message.includes('already voted')) {
+        toast.error('You have already voted on this post');
+      } else if (error.message.includes('404')) {
+        toast.error('Post not found');
+      } else {
+        toast.error('Failed to update vote');
+      }
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleDownvote = async () => {
+    if (!post || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Attempting downvote for post:', post.id); // Debug log
+      
+      if (post.type === 'forum') {
+        const response = await apiService.voteForumPost(post.id, 'down');
+        console.log('Downvote response:', response); // Debug log
+        
+        // Update local state based on server response
+        setUpvotes(response.upvotes);
+        setDownvotes(response.downvotes);
+        setUserVote(response.userVote);
+        setHasVoted(response.userVote !== null);
+        
+        if (response.userVote === 'down') {
+          toast.success('Downvoted!');
+        } else if (response.userVote === null) {
+          toast.success('Vote removed!');
+        } else {
+          toast.success('Changed to downvote!');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to downvote:', error);
+      if (error.message.includes('already voted')) {
+        toast.error('You have already voted on this post');
+      } else if (error.message.includes('404')) {
+        toast.error('Post not found');
+      } else {
+        toast.error('Failed to update vote');
+      }
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleComment = async () => {
+    if (!comment.trim() || !post || submittingComment) return;
+
+    try {
+      setSubmittingComment(true);
+      console.log('Attempting to add comment:', { postId: post.id, content: comment }); // Debug log
+      
+      let newComment;
+      if (post.type === 'forum') {
+        newComment = await apiService.addForumComment(post.id, comment);
+        console.log('Comment added successfully:', newComment); // Debug log
+      } else if (post.type === 'trade') {
+        // Implement trade comments if needed
+        newComment = {
+          comment_id: Date.now().toString(),
+          content: comment,
+          created_at: new Date().toISOString(),
+          username: 'You',
+          credibility_score: 100
+        };
+      }
+      
+      if (newComment) {
+        setComments(prev => [newComment, ...prev]);
+        setComment('');
+        toast.success('Comment added!');
+      }
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      if (error.message.includes('404')) {
+        toast.error('Post not found');
+      } else {
+        toast.error('Failed to add comment');
+      }
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
 
   // Helper functions for modal
   const getPostTypeIcon = (type: string) => {
@@ -279,22 +463,6 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
     setLiked(!liked);
   };
 
-  const handleComment = () => {
-    if (comment.trim()) {
-      setComments([
-        { 
-          id: Date.now(), 
-          user: 'You', 
-          content: comment, 
-          time: 'now', 
-          avatar: 'Y' 
-        },
-        ...comments
-      ]);
-      setComment('');
-    }
-  };
-
   const handleUserClick = () => {
     onUserClick(post.id); // Pass the user ID or post ID to identify the user
     onClose();
@@ -302,8 +470,8 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full p-0 overflow-hidden">
-        <div className="flex h-[95vh]">
+      <DialogContent className="max-w-[98vw] max-h-[98vh] w-full h-full p-0 overflow-hidden border-0 shadow-2xl">
+        <div className="flex h-[98vh]">
           {/* Left side - Image Viewer */}
           <div className="flex-1 bg-black relative">
             <button
@@ -331,7 +499,7 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
           </div>
 
           {/* Right side - Post Details and Comments */}
-          <div className="w-[450px] bg-background border-l flex flex-col">
+          <div className="w-[600px] bg-background border-l flex flex-col shadow-2xl">
             {/* Post Header */}
             <div className="p-6 border-b">
               <div className="flex items-center gap-4">
@@ -408,76 +576,155 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    onClick={handleLike}
-                    className={`${liked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500`}
-                  >
-                    <Heart className={`w-5 h-5 mr-2 ${liked ? 'fill-current' : ''}`} />
-                    {(post.likes || 0) + (liked ? 1 : 0)}
-                  </Button>
-                  <Button variant="ghost" size="lg" className="text-muted-foreground">
-                    <MessageSquare className="w-5 h-5 mr-2" />
+                  {post.type === 'forum' ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="lg"
+                        onClick={handleUpvote}
+                        disabled={votingLoading}
+                        className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground'} hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950 text-base px-4 py-3 relative`}
+                        title={userVote === 'up' ? 'Click to remove upvote' : userVote === 'down' ? 'Change to upvote' : 'Upvote this post'}
+                      >
+                        <ArrowUp className={`w-6 h-6 mr-3 ${userVote === 'up' ? 'fill-current' : ''}`} />
+                        {upvotes}
+                        {votingLoading && (
+                          <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="lg"
+                        onClick={handleDownvote}
+                        disabled={votingLoading}
+                        className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground'} hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 text-base px-4 py-3 relative`}
+                        title={userVote === 'down' ? 'Click to remove downvote' : userVote === 'up' ? 'Change to downvote' : 'Downvote this post'}
+                      >
+                        <ArrowDown className={`w-6 h-6 mr-3 ${userVote === 'down' ? 'fill-current' : ''}`} />
+                        {downvotes}
+                        {votingLoading && (
+                          <Loader2 className="w-4 h-4 animate-spin absolute -top-1 -right-1" />
+                        )}
+                      </Button>
+                      
+                      {/* Vote status indicator */}
+                      {hasVoted && (
+                        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
+                          {userVote === 'up' ? '✓ Upvoted' : '✓ Downvoted'}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="lg"
+                      onClick={handleLike}
+                      className={`${liked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500 text-base px-4 py-3`}
+                    >
+                      <Heart className={`w-6 h-6 mr-3 ${liked ? 'fill-current' : ''}`} />
+                      {(post.likes || 0) + (liked ? 1 : 0)}
+                    </Button>
+                  )}
+                  
+                  <Button variant="ghost" size="lg" className="text-muted-foreground text-base px-4 py-3">
+                    <MessageSquare className="w-6 h-6 mr-3" />
                     {comments.length}
                   </Button>
-                  <Button variant="ghost" size="lg" className="text-muted-foreground">
-                    <Share className="w-5 h-5 mr-2" />
+                  <Button variant="ghost" size="lg" className="text-muted-foreground text-base px-4 py-3">
+                    <Share className="w-6 h-6 mr-3" />
                     Share
                   </Button>
                 </div>
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-500">
-                  <Flag className="w-5 h-5" />
+                <Button variant="ghost" size="lg" className="text-muted-foreground hover:text-red-500 px-4 py-3">
+                  <Flag className="w-6 h-6" />
                 </Button>
               </div>
             </div>
 
             {/* Comments Section */}
             <div className="flex-1 overflow-y-auto">
-              <div className="p-6 space-y-6">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-4">
-                    <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
-                        {comment.avatar}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="font-medium text-sm">{comment.user}</span>
-                          <span className="text-xs text-muted-foreground">{comment.time}</span>
+              <div className="p-8 space-y-8">
+                <h4 className="font-semibold text-lg text-muted-foreground">
+                  Comments ({comments.length})
+                  {loadingComments && <Loader2 className="w-4 h-4 animate-spin inline ml-2" />}
+                </h4>
+                
+                {loadingComments ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                ) : comments.length > 0 ? (
+                  comments.map((comment) => (
+                    <div key={comment.comment_id || comment.id} className="flex gap-5">
+                      <Avatar className="w-12 h-12">
+                        <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-base font-semibold">
+                          {(comment.username || 'U')[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="bg-muted/50 rounded-xl p-5">
+                          <div className="flex items-center gap-4 mb-3">
+                            <span className="font-semibold text-base">{comment.username}</span>
+                            {comment.credibility_score && (
+                              <Badge variant="secondary" className="text-xs">
+                                {comment.credibility_score}★
+                              </Badge>
+                            )}
+                            <span className="text-sm text-muted-foreground">
+                              {comment.created_at ? new Date(comment.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : comment.time}
+                            </span>
+                          </div>
+                          <p className="text-base leading-relaxed">{comment.content}</p>
                         </div>
-                        <p className="text-sm leading-relaxed">{comment.content}</p>
-                      </div>
-                      <div className="flex items-center gap-6 mt-2 text-xs text-muted-foreground">
-                        <button className="hover:text-foreground transition-colors">Like</button>
-                        <button className="hover:text-foreground transition-colors">Reply</button>
+                        <div className="flex items-center gap-8 mt-3 text-sm text-muted-foreground">
+                          <button className="hover:text-foreground transition-colors font-medium">Like</button>
+                          <button className="hover:text-foreground transition-colors font-medium">Reply</button>
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No comments yet. Be the first to comment!</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
             {/* Comment Input */}
-            <div className="p-6 border-t">
-              <div className="flex gap-4">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+            <div className="p-8 border-t bg-muted/20">
+              <div className="flex gap-5">
+                <Avatar className="w-12 h-12">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-base font-semibold">
                     Y
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 flex gap-3">
+                <div className="flex-1 flex gap-4">
                   <Input
                     placeholder="Write a comment..."
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleComment()}
-                    className="text-sm h-10"
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleComment()}
+                    className="text-base h-12 rounded-xl border-2 focus:border-primary"
+                    disabled={submittingComment}
                   />
-                  <Button size="sm" onClick={handleComment} disabled={!comment.trim()} className="px-4">
-                    <Send className="w-4 h-4" />
+                  <Button 
+                    size="lg" 
+                    onClick={handleComment} 
+                    disabled={!comment.trim() || submittingComment} 
+                    className="px-6 h-12 rounded-xl"
+                  >
+                    {submittingComment ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
                   </Button>
                 </div>
               </div>

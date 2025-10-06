@@ -26,7 +26,13 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Eye
+  Eye,
+  Check,
+  CheckCircle,
+  Send,
+  Star,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 interface Trade {
@@ -41,6 +47,11 @@ interface Trade {
   credibility_score: number;
   images?: { image_url: string; uploaded_at: string }[];
   user_id?: string;
+  // Updated fields for upvote/downvote system
+  upvotes?: number;
+  downvotes?: number;
+  comments?: TradeComment[];
+  comment_count?: number;
 }
 
 interface User {
@@ -49,6 +60,16 @@ interface User {
   email: string;
   robloxUsername?: string;
   role?: string;
+}
+
+interface TradeComment {
+  comment_id: string;
+  trade_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  username: string;
+  credibility_score?: number;
 }
 
 interface ImageDisplayProps {
@@ -201,13 +222,146 @@ function ImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrevious 
   );
 }
 
-// Trade Details Modal Component
+// Enhanced Trade Details Modal Component with upvote/downvote and comments
 function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, canDelete, deleteLoading }: TradeDetailsModalProps) {
+  const [comments, setComments] = useState<TradeComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [upvotes, setUpvotes] = useState(0);
+  const [downvotes, setDownvotes] = useState(0);
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [votingLoading, setVotingLoading] = useState(false);
+
+  // Load trade comments when modal opens
+  useEffect(() => {
+    if (isOpen && trade) {
+      loadTradeData();
+    }
+  }, [isOpen, trade]);
+
+  const loadTradeData = async () => {
+    if (!trade) return;
+
+    try {
+      setLoadingComments(true);
+      console.log('Loading trade data for:', trade.trade_id);
+      
+      // Load comments and vote data
+      const [commentsResponse, voteResponse] = await Promise.allSettled([
+        apiService.getTradeComments(trade.trade_id),
+        apiService.getTradeVotes(trade.trade_id)
+      ]);
+
+      // Handle comments
+      if (commentsResponse.status === 'fulfilled') {
+        setComments(commentsResponse.value.comments || []);
+      } else {
+        console.error('Failed to load comments:', commentsResponse.reason);
+        setComments([]);
+      }
+
+      // Handle votes
+      if (voteResponse.status === 'fulfilled') {
+        setUpvotes(voteResponse.value.upvotes || 0);
+        setDownvotes(voteResponse.value.downvotes || 0);
+        setUserVote(voteResponse.value.userVote || null);
+      } else {
+        console.error('Failed to load votes:', voteResponse.reason);
+        setUpvotes(trade.upvotes || 0);
+        setDownvotes(trade.downvotes || 0);
+        setUserVote(null);
+      }
+
+    } catch (error) {
+      console.error('Failed to load trade data:', error);
+      toast.error('Failed to load trade data');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleUpvote = async () => {
+    if (!trade || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Upvoting trade:', trade.trade_id);
+      
+      const response = await apiService.voteTradePost(trade.trade_id, 'up');
+      
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      
+      if (response.userVote === 'up') {
+        toast.success('Upvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to upvote!');
+      }
+    } catch (error) {
+      console.error('Failed to upvote:', error);
+      toast.error('Failed to update vote');
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleDownvote = async () => {
+    if (!trade || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Downvoting trade:', trade.trade_id);
+      
+      const response = await apiService.voteTradePost(trade.trade_id, 'down');
+      
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      
+      if (response.userVote === 'down') {
+        toast.success('Downvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to downvote!');
+      }
+    } catch (error) {
+      console.error('Failed to downvote:', error);
+      toast.error('Failed to update vote');
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !trade || submittingComment) return;
+
+    try {
+      setSubmittingComment(true);
+      console.log('Adding comment to trade:', trade.trade_id);
+      
+      const comment = await apiService.addTradeComment(trade.trade_id, newComment);
+      
+      setComments(prev => [comment, ...prev]);
+      setNewComment('');
+      toast.success('Comment added!');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      toast.error('Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
   if (!trade) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Trade Details</span>
@@ -226,7 +380,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
             <Avatar className="w-12 h-12">
               <AvatarFallback>{trade.username?.[0] || 'U'}</AvatarFallback>
             </Avatar>
-            <div>
+            <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{trade.username}</span>
                 <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
@@ -236,6 +390,32 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
               <div className="text-sm text-muted-foreground">
                 @{trade.roblox_username}
               </div>
+            </div>
+            
+            {/* Vote Buttons */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleUpvote}
+                disabled={votingLoading}
+                className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950'} transition-colors`}
+              >
+                <ArrowUp className={`w-5 h-5 mr-2 ${userVote === 'up' ? 'fill-current' : ''}`} />
+                {upvotes}
+                {votingLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownvote}
+                disabled={votingLoading}
+                className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950'} transition-colors`}
+              >
+                <ArrowDown className={`w-5 h-5 mr-2 ${userVote === 'down' ? 'fill-current' : ''}`} />
+                {downvotes}
+                {votingLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+              </Button>
             </div>
           </div>
 
@@ -284,6 +464,114 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
             </div>
           )}
 
+          {/* Vote Stats */}
+          <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-green-600">
+                <ArrowUp className="w-4 h-4" />
+                <span className="font-medium">{upvotes}</span>
+              </div>
+              <span className="text-muted-foreground">Upvotes</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-red-600">
+                <ArrowDown className="w-4 h-4" />
+                <span className="font-medium">{downvotes}</span>
+              </div>
+              <span className="text-muted-foreground">Downvotes</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-blue-600">
+                <MessageSquare className="w-4 h-4" />
+                <span className="font-medium">{comments.length}</span>
+              </div>
+              <span className="text-muted-foreground">Comments</span>
+            </div>
+          </div>
+
+          {/* Comments Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">
+                Comments ({comments.length})
+                {loadingComments && <Loader2 className="w-4 h-4 animate-spin inline ml-2" />}
+              </h3>
+            </div>
+
+            {/* Add Comment */}
+            <div className="flex gap-3 p-4 border rounded-lg bg-muted/20">
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                  Y
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 flex gap-2">
+                <Input
+                  placeholder="Add a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAddComment()}
+                  disabled={submittingComment}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || submittingComment}
+                >
+                  {submittingComment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Comments List */}
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {loadingComments ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
+                  <div key={comment.comment_id} className="flex gap-3 p-3 border rounded-lg">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
+                        {comment.username[0]?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">{comment.username}</span>
+                        {comment.credibility_score && (
+                          <Badge variant="secondary" className="text-xs">
+                            {comment.credibility_score}★
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(comment.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{comment.content}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No comments yet. Be the first to comment!</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Trade Info */}
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
             <div>
@@ -308,6 +596,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </Button>
+                
                 {canDelete && (
                   <Button 
                     variant="outline" 
@@ -395,6 +684,8 @@ export function TradingHub() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [modalSelectedImages, setModalSelectedImages] = useState<{ image_url: string; uploaded_at: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
 
   const loadTrades = useCallback(async () => {
     try {
@@ -1267,19 +1558,87 @@ export function TradingHub() {
                     <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
                       {canEditTrade(trade) ? (
                         <>
-                          <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
-                            <MessageSquare className="w-3 h-3 mr-1" />
-                            Contact
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="text-blue-600 hover:text-blue-700"
-                            onClick={() => handleEditTrade(trade)}
-                          >
-                            <Edit className="w-3 h-3 mr-1" />
-                            Edit
-                          </Button>
+                          {/* Show different buttons based on trade status */}
+                          {trade.status === 'open' || trade.status === 'in_progress' ? (
+                            <>
+                              <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                                <MessageSquare className="w-3 h-3 mr-1" />
+                                Contact
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => handleMarkAsTraded(trade.trade_id, trade.item_offered)}
+                                disabled={statusUpdateLoading === trade.trade_id}
+                                title="Mark as traded/completed"
+                              >
+                                {statusUpdateLoading === trade.trade_id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Check className="w-3 h-3 mr-1" />
+                                )}
+                                {statusUpdateLoading === trade.trade_id ? 'Updating...' : 'Done'}
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-blue-600 hover:text-blue-700"
+                                onClick={() => handleEditTrade(trade)}
+                              >
+                                <Edit className="w-3 h-3 mr-1" />
+                                Edit
+                              </Button>
+                            </>
+                          ) : trade.status === 'completed' ? (
+                            <>
+                              <Button size="sm" className="flex-1 bg-gray-500 hover:bg-gray-600 text-white" disabled>
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Completed
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-blue-600 hover:text-blue-700"
+                                onClick={() => handleReopenTrade(trade.trade_id, trade.item_offered)}
+                                disabled={statusUpdateLoading === trade.trade_id}
+                                title="Reopen trade"
+                              >
+                                {statusUpdateLoading === trade.trade_id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <TrendingUp className="w-3 h-3 mr-1" />
+                                )}
+                                {statusUpdateLoading === trade.trade_id ? 'Reopening...' : 'Reopen'}
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-blue-600 hover:text-blue-700"
+                                onClick={() => handleEditTrade(trade)}
+                              >
+                                <Edit className="w-3 h-3 mr-1" />
+                                Edit
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                                <MessageSquare className="w-3 h-3 mr-1" />
+                                Contact
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="flex-1"
+                                onClick={() => handleTradeClick(trade)}
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View Details
+                              </Button>
+                            </>
+                          )}
+                          
                           {canDeleteTrade(trade) && (
                             <Button 
                               variant="outline" 
@@ -1330,6 +1689,28 @@ export function TradingHub() {
                           )}
                         </>
                       )}
+                    </div>
+
+                    {/* Trade Stats */}
+                    <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1 text-green-600">
+                          <ArrowUp className="w-3 h-3" />
+                          <span>{trade.upvotes || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-red-600">
+                          <ArrowDown className="w-3 h-3" />
+                          <span>{trade.downvotes || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" />
+                          <span>{trade.comment_count || 0}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Eye className="w-3 h-3" />
+                        <span>View Details</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

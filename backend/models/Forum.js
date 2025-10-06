@@ -76,5 +76,30 @@ const forumCommentSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Vote tracking schema
+const forumVoteSchema = new mongoose.Schema({
+  post_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ForumPost',
+    required: true
+  },
+  user_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  vote_type: {
+    type: String,
+    enum: ['up', 'down'],
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+// Ensure one vote per user per post
+forumVoteSchema.index({ post_id: 1, user_id: 1 }, { unique: true });
+
 export const ForumPost = mongoose.model('ForumPost', forumPostSchema);
 export const ForumComment = mongoose.model('ForumComment', forumCommentSchema);
+export const ForumVote = mongoose.model('ForumVote', forumVoteSchema);

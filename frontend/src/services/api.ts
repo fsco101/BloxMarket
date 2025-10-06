@@ -219,8 +219,26 @@ class ApiService {
     return this.request(`/forum/posts?${queryString}`);
   }
 
+  // Get single forum post with comments - FIXED
   async getForumPost(postId: string) {
-    return this.request(`/forum/posts/${postId}`);
+    console.log('Fetching forum post:', postId); // Debug log
+    
+    const response = await fetch(`${API_BASE_URL}/forum/posts/${postId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get forum post error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Forum post data:', data); // Debug log
+    return data;
   }
 
   async createForumPost(postData: {
@@ -287,17 +305,52 @@ class ApiService {
     }
   }
 
+  // Add forum comment - FIXED
   async addForumComment(postId: string, content: string) {
-    return this.request(`/forum/posts/${postId}/comments`, {
+    console.log('Adding comment:', { postId, content }); // Debug log
+    
+    const response = await fetch(`${API_BASE_URL}/forum/posts/${postId}/comments`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ content })
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Add comment error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Comment response:', data); // Debug log
+    return data;
   }
 
-  async deleteForumPost(postId: string) {
-    return this.request(`/forum/posts/${postId}`, {
-      method: 'DELETE',
+  // Forum voting - FIXED
+  async voteForumPost(postId: string, voteType: 'up' | 'down') {
+    console.log('Voting on post:', { postId, voteType }); // Debug log
+    
+    const response = await fetch(`${API_BASE_URL}/forum/posts/${postId}/vote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ voteType })
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Vote error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Vote response:', data); // Debug log
+    return data;
   }
 
   // Event methods
@@ -518,6 +571,143 @@ class ApiService {
 
   isAuthenticated(): boolean {
     return !!this.token;
+  }
+
+  // Get trade comments
+  async getTradeComments(tradeId: string) {
+    console.log('Fetching trade comments:', tradeId);
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/comments`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get trade comments error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade comments data:', data);
+    return data;
+  }
+
+  // Add trade comment
+  async addTradeComment(tradeId: string, content: string) {
+    console.log('Adding trade comment:', { tradeId, content });
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ content })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Add trade comment error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade comment response:', data);
+    return data;
+  }
+
+  // Get trade rating (likes)
+  async getTradeRating(tradeId: string) {
+    console.log('Fetching trade rating:', tradeId);
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/rating`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get trade rating error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade rating data:', data);
+    return data;
+  }
+
+  // Toggle trade like
+  async toggleTradeLike(tradeId: string) {
+    console.log('Toggling trade like:', tradeId);
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/like`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Toggle trade like error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade like response:', data);
+    return data;
+  }
+
+  // Get trade votes
+  async getTradeVotes(tradeId: string) {
+    console.log('Fetching trade votes:', tradeId);
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/votes`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get trade votes error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade votes data:', data);
+    return data;
+  }
+
+  // Vote on trade post
+  async voteTradePost(tradeId: string, voteType: 'up' | 'down') {
+    console.log('Voting on trade:', { tradeId, voteType });
+    
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/vote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ voteType })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Vote trade error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Trade vote response:', data);
+    return data;
   }
 }
 

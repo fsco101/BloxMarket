@@ -1,5 +1,5 @@
 import express from 'express';
-import { ForumPost, ForumComment } from '../models/Forum.js';
+import { ForumPost, ForumComment, ForumVote } from '../models/Forum.js'; // Add ForumVote here
 import { User } from '../models/User.js';
 import { authenticateToken } from './auth.js';
 import mongoose from 'mongoose';
@@ -88,40 +88,48 @@ router.get('/posts', async (req, res) => {
   }
 });
 
-// Get single forum post with comments
-router.get('/posts/:postId', async (req, res) => {
+// Get single forum post with comments - FIX: Add authenticateToken middleware
+router.get('/posts/:postId', authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
+    const userId = req.user.userId;
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ error: 'Invalid post ID' });
     }
 
-    // Get post
     const post = await ForumPost.findById(postId)
-      .populate('user_id', 'username credibility_score');
+      .populate('user_id', 'username credibility_score')
+      .lean();
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    // Get comments
+    // Get comments for this post
     const comments = await ForumComment.find({ post_id: postId })
       .populate('user_id', 'username credibility_score')
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.json({
+    // Check user's vote on this post
+    const userVote = await ForumVote.findOne({
+      post_id: postId,
+      user_id: userId
+    }).lean();
+
+    // Format response
+    const response = {
       post_id: post._id,
       title: post.title,
       content: post.content,
       category: post.category,
-      upvotes: post.upvotes,
-      downvotes: post.downvotes,
+      upvotes: post.upvotes || 0,
+      downvotes: post.downvotes || 0,
       created_at: post.createdAt,
       username: post.user_id.username,
       credibility_score: post.user_id.credibility_score,
-      user_id: post.user_id._id,
-      images: post.images || [],
+      userVote: userVote ? userVote.vote_type : null,
       comments: comments.map(comment => ({
         comment_id: comment._id,
         content: comment.content,
@@ -129,11 +137,13 @@ router.get('/posts/:postId', async (req, res) => {
         username: comment.user_id.username,
         credibility_score: comment.user_id.credibility_score
       }))
-    });
+    };
+
+    res.json(response);
 
   } catch (error) {
-    console.error('Get forum post error:', error);
-    res.status(500).json({ error: 'Failed to get forum post' });
+    console.error('Get post error:', error);
+    res.status(500).json({ error: 'Failed to fetch post' });
   }
 });
 
@@ -349,18 +359,128 @@ router.put('/posts/:postId', authenticateToken, upload.array('images', 5), async
   }
 });
 
-// Add comment to post (protected)
+// Vote on post (protected) - ENHANCED ERROR HANDLING
+router.post('/posts/:postId/vote', authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { voteType } = req.body;
+    const userId = req.user.userId;
+
+    console.log('Vote request:', { postId, voteType, userId }); // Debug log
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ error: 'Invalid post ID' });
+    }
+
+    if (!['up', 'down'].includes(voteType)) {
+      return res.status(400).json({ error: 'Invalid vote type. Must be "up" or "down"' });
+    }
+
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    // Check for existing vote
+    const existingVote = await ForumVote.findOne({
+      post_id: postId,
+      user_id: userId
+    });
+
+    let userVote = null;
+    let upvotes = post.upvotes || 0;
+    let downvotes = post.downvotes || 0;
+
+    if (existingVote) {
+      // User has already voted
+      if (existingVote.vote_type === voteType) {
+        // Same vote type - remove the vote
+        await ForumVote.deleteOne({ _id: existingVote._id });
+        
+        if (voteType === 'up') {
+          upvotes = Math.max(0, upvotes - 1);
+        } else {
+          downvotes = Math.max(0, downvotes - 1);
+        }
+        
+        userVote = null;
+        console.log('Vote removed'); // Debug log
+      } else {
+        // Different vote type - change the vote
+        existingVote.vote_type = voteType;
+        await existingVote.save();
+        
+        if (voteType === 'up') {
+          upvotes += 1;
+          downvotes = Math.max(0, downvotes - 1);
+        } else {
+          upvotes = Math.max(0, upvotes - 1);
+          downvotes += 1;
+        }
+        
+        userVote = voteType;
+        console.log('Vote changed to:', voteType); // Debug log
+      }
+    } else {
+      // New vote
+      const newVote = new ForumVote({
+        post_id: postId,
+        user_id: userId,
+        vote_type: voteType
+      });
+      
+      await newVote.save();
+      
+      if (voteType === 'up') {
+        upvotes += 1;
+      } else {
+        downvotes += 1;
+      }
+      
+      userVote = voteType;
+      console.log('New vote added:', voteType); // Debug log
+    }
+
+    // Update post with new vote counts
+    post.upvotes = upvotes;
+    post.downvotes = downvotes;
+    await post.save();
+
+    console.log('Final vote counts:', { upvotes, downvotes, userVote }); // Debug log
+
+    res.json({
+      message: 'Vote updated successfully',
+      upvotes,
+      downvotes,
+      userVote
+    });
+
+  } catch (error) {
+    console.error('Vote error:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'You have already voted on this post' });
+    }
+    
+    res.status(500).json({ error: 'Failed to record vote' });
+  }
+});
+
+// Add comment to post (protected) - ENHANCED
 router.post('/posts/:postId/comments', authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const { content } = req.body;
     const userId = req.user.userId;
 
+    console.log('Comment request:', { postId, content, userId }); // Debug log
+
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ error: 'Invalid post ID' });
     }
 
-    if (!content) {
+    if (!content || !content.trim()) {
       return res.status(400).json({ error: 'Content is required' });
     }
 
@@ -370,18 +490,30 @@ router.post('/posts/:postId/comments', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const newComment = new ForumComment({
+    // Create comment
+    const comment = new ForumComment({
       post_id: postId,
       user_id: userId,
-      content
+      content: content.trim()
     });
 
-    const savedComment = await newComment.save();
+    await comment.save();
+    console.log('Comment saved:', comment._id); // Debug log
 
-    res.status(201).json({
-      message: 'Comment added successfully',
-      commentId: savedComment._id
-    });
+    // Populate user data
+    await comment.populate('user_id', 'username credibility_score');
+
+    const responseData = {
+      comment_id: comment._id,
+      content: comment.content,
+      created_at: comment.createdAt,
+      username: comment.user_id.username,
+      credibility_score: comment.user_id.credibility_score
+    };
+
+    console.log('Comment response:', responseData); // Debug log
+
+    res.status(201).json(responseData);
 
   } catch (error) {
     console.error('Add comment error:', error);

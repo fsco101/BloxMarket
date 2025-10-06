@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Trade } from '../models/Trade.js';
+import { Trade, TradeComment, TradeRating, TradeVote } from '../models/Trade.js';
 import { User } from '../models/User.js';
 import { authenticateToken } from './auth.js';
 import mongoose from 'mongoose';
@@ -141,8 +141,24 @@ router.get('/', async (req, res) => {
 
     const totalTrades = await Trade.countDocuments(query);
 
+    // For each trade, add comment and vote counts
+    const tradesWithCounts = await Promise.all(trades.map(async (trade) => {
+      const [commentCount, upvotes, downvotes] = await Promise.all([
+        TradeComment.countDocuments({ trade_id: trade._id }),
+        TradeVote.countDocuments({ trade_id: trade._id, vote_type: 'up' }),
+        TradeVote.countDocuments({ trade_id: trade._id, vote_type: 'down' })
+      ]);
+
+      return {
+        ...trade.toObject(),
+        comment_count: commentCount,
+        upvotes,
+        downvotes
+      };
+    }));
+
     res.json({
-      trades: trades.map(trade => ({
+      trades: tradesWithCounts.map(trade => ({
         trade_id: trade._id,
         item_offered: trade.item_offered,
         item_requested: trade.item_requested,
@@ -459,6 +475,389 @@ router.get('/user/:userId', async (req, res) => {
   } catch (error) {
     console.error('Get user trades error:', error);
     res.status(500).json({ error: 'Failed to get user trades' });
+  }
+});
+
+// Update trade status (protected)
+router.patch('/:tradeId/status', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const { status } = req.body;
+    const userId = req.user.userId;
+
+    // Validate MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    // Validate status
+    const validStatuses = ['open', 'in_progress', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    // Find the trade using MongoDB _id, not trade_id field
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Check if user owns the trade or is admin/moderator
+    const user = await User.findById(userId);
+    const canUpdate = trade.user_id.equals(userId) || 
+                      user.role === 'admin' || 
+                      user.role === 'moderator';
+
+    if (!canUpdate) {
+      return res.status(403).json({ error: 'You can only update your own trades' });
+    }
+
+    // Update the trade status
+    trade.status = status;
+    trade.updatedAt = new Date();
+    
+    await trade.save();
+
+    res.json({ 
+      message: 'Trade status updated successfully',
+      trade: {
+        trade_id: trade._id,
+        status: trade.status,
+        updated_at: trade.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Update trade status error:', error);
+    res.status(500).json({ error: 'Failed to update trade status' });
+  }
+});
+
+// Get trade comments
+router.get('/:tradeId/comments', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Get comments for this trade
+    const comments = await TradeComment.find({ trade_id: tradeId })
+      .populate('user_id', 'username credibility_score')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formattedComments = comments.map(comment => ({
+      comment_id: comment._id,
+      trade_id: comment.trade_id,
+      content: comment.content,
+      created_at: comment.createdAt,
+      username: comment.user_id.username,
+      credibility_score: comment.user_id.credibility_score
+    }));
+
+    res.json({
+      comments: formattedComments
+    });
+
+  } catch (error) {
+    console.error('Get trade comments error:', error);
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+});
+
+// Add trade comment
+router.post('/:tradeId/comments', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const { content } = req.body;
+    const userId = req.user.userId;
+
+    console.log('Add comment request:', { tradeId, content, userId });
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Create comment
+    const comment = new TradeComment({
+      trade_id: tradeId,
+      user_id: userId,
+      content: content.trim()
+    });
+
+    await comment.save();
+    console.log('Comment saved:', comment._id);
+
+    // Populate user data
+    await comment.populate('user_id', 'username credibility_score');
+
+    const responseData = {
+      comment_id: comment._id,
+      trade_id: comment.trade_id,
+      content: comment.content,
+      created_at: comment.createdAt,
+      username: comment.user_id.username,
+      credibility_score: comment.user_id.credibility_score
+    };
+
+    console.log('Comment response:', responseData);
+
+    res.status(201).json(responseData);
+
+  } catch (error) {
+    console.error('Add trade comment error:', error);
+    res.status(500).json({ error: 'Failed to add comment' });
+  }
+});
+
+// Get trade rating
+router.get('/:tradeId/rating', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const userId = req.user.userId;
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Get total likes for this trade
+    const totalLikes = await TradeRating.countDocuments({
+      trade_id: tradeId,
+      rating_type: 'like'
+    });
+
+    // Check if current user has liked this trade
+    const userRating = await TradeRating.findOne({
+      trade_id: tradeId,
+      user_id: userId,
+      rating_type: 'like'
+    });
+
+    res.json({
+      likes: totalLikes,
+      userLiked: !!userRating
+    });
+
+  } catch (error) {
+    console.error('Get trade rating error:', error);
+    res.status(500).json({ error: 'Failed to fetch rating' });
+  }
+});
+
+// Toggle trade like
+router.post('/:tradeId/like', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const userId = req.user.userId;
+
+    console.log('Toggle like request:', { tradeId, userId });
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Check if user has already liked this trade
+    const existingRating = await TradeRating.findOne({
+      trade_id: tradeId,
+      user_id: userId,
+      rating_type: 'like'
+    });
+
+    let userLiked = false;
+
+    if (existingRating) {
+      // Remove like
+      await TradeRating.deleteOne({ _id: existingRating._id });
+      console.log('Like removed');
+    } else {
+      // Add like
+      const newRating = new TradeRating({
+        trade_id: tradeId,
+        user_id: userId,
+        rating_type: 'like'
+      });
+      
+      await newRating.save();
+      userLiked = true;
+      console.log('Like added');
+    }
+
+    // Get updated total likes
+    const totalLikes = await TradeRating.countDocuments({
+      trade_id: tradeId,
+      rating_type: 'like'
+    });
+
+    console.log('Final like count:', { totalLikes, userLiked });
+
+    res.json({
+      message: 'Like updated successfully',
+      likes: totalLikes,
+      userLiked
+    });
+
+  } catch (error) {
+    console.error('Toggle trade like error:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'You have already rated this trade' });
+    }
+    
+    res.status(500).json({ error: 'Failed to update like' });
+  }
+});
+
+// Get trade votes
+router.get('/:tradeId/votes', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const userId = req.user.userId;
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Get total votes for this trade
+    const [upvotes, downvotes] = await Promise.all([
+      TradeVote.countDocuments({ trade_id: tradeId, vote_type: 'up' }),
+      TradeVote.countDocuments({ trade_id: tradeId, vote_type: 'down' })
+    ]);
+
+    // Check if current user has voted on this trade
+    const userVote = await TradeVote.findOne({
+      trade_id: tradeId,
+      user_id: userId
+    });
+
+    res.json({
+      upvotes,
+      downvotes,
+      userVote: userVote ? userVote.vote_type : null
+    });
+
+  } catch (error) {
+    console.error('Get trade votes error:', error);
+    res.status(500).json({ error: 'Failed to fetch votes' });
+  }
+});
+
+// Vote on trade
+router.post('/:tradeId/vote', authenticateToken, async (req, res) => {
+  try {
+    const { tradeId } = req.params;
+    const { voteType } = req.body;
+    const userId = req.user.userId;
+
+    console.log('Trade vote request:', { tradeId, voteType, userId });
+
+    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
+      return res.status(400).json({ error: 'Invalid trade ID' });
+    }
+
+    if (!['up', 'down'].includes(voteType)) {
+      return res.status(400).json({ error: 'Invalid vote type. Must be "up" or "down"' });
+    }
+
+    // Check if trade exists
+    const trade = await Trade.findById(tradeId);
+    if (!trade) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    // Check for existing vote
+    const existingVote = await TradeVote.findOne({
+      trade_id: tradeId,
+      user_id: userId
+    });
+
+    let userVote = null;
+
+    if (existingVote) {
+      // User has already voted
+      if (existingVote.vote_type === voteType) {
+        // Same vote type - remove the vote
+        await TradeVote.deleteOne({ _id: existingVote._id });
+        console.log('Vote removed');
+      } else {
+        // Different vote type - change the vote
+        existingVote.vote_type = voteType;
+        await existingVote.save();
+        userVote = voteType;
+        console.log('Vote changed to:', voteType);
+      }
+    } else {
+      // New vote
+      const newVote = new TradeVote({
+        trade_id: tradeId,
+        user_id: userId,
+        vote_type: voteType
+      });
+      
+      await newVote.save();
+      userVote = voteType;
+      console.log('New vote added:', voteType);
+    }
+
+    // Get updated vote counts
+    const [upvotes, downvotes] = await Promise.all([
+      TradeVote.countDocuments({ trade_id: tradeId, vote_type: 'up' }),
+      TradeVote.countDocuments({ trade_id: tradeId, vote_type: 'down' })
+    ]);
+
+    console.log('Final vote counts:', { upvotes, downvotes, userVote });
+
+    res.json({
+      message: 'Vote updated successfully',
+      upvotes,
+      downvotes,
+      userVote
+    });
+
+  } catch (error) {
+    console.error('Trade vote error:', error);
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'You have already voted on this trade' });
+    }
+    
+    res.status(500).json({ error: 'Failed to record vote' });
   }
 });
 
