@@ -619,51 +619,6 @@ class ApiService {
     return data;
   }
 
-  // Get trade rating (likes)
-  async getTradeRating(tradeId: string) {
-    console.log('Fetching trade rating:', tradeId);
-    
-    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/rating`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Get trade rating error:', response.status, errorData);
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('Trade rating data:', data);
-    return data;
-  }
-
-  // Toggle trade like
-  async toggleTradeLike(tradeId: string) {
-    console.log('Toggling trade like:', tradeId);
-    
-    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/like`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Toggle trade like error:', response.status, errorData);
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('Trade like response:', data);
-    return data;
-  }
-
   // Get trade votes
   async getTradeVotes(tradeId: string) {
     console.log('Fetching trade votes:', tradeId);

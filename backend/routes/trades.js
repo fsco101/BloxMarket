@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Trade, TradeComment, TradeRating, TradeVote } from '../models/Trade.js';
+import { Trade, TradeComment, TradeVote } from '../models/Trade.js';
 import { User } from '../models/User.js';
 import { authenticateToken } from './auth.js';
 import mongoose from 'mongoose';
@@ -169,7 +169,10 @@ router.get('/', async (req, res) => {
         roblox_username: trade.user_id.roblox_username,
         credibility_score: trade.user_id.credibility_score,
         user_id: trade.user_id._id,
-        images: trade.images || []
+        images: trade.images || [],
+        comment_count: trade.comment_count,
+        upvotes: trade.upvotes,
+        downvotes: trade.downvotes
       })),
       pagination: {
         currentPage: page,
@@ -202,6 +205,13 @@ router.get('/:tradeId', async (req, res) => {
       return res.status(404).json({ error: 'Trade not found' });
     }
 
+    // Get vote counts for this trade
+    const [commentCount, upvotes, downvotes] = await Promise.all([
+      TradeComment.countDocuments({ trade_id: trade._id }),
+      TradeVote.countDocuments({ trade_id: trade._id, vote_type: 'up' }),
+      TradeVote.countDocuments({ trade_id: trade._id, vote_type: 'down' })
+    ]);
+
     res.json({
       trade_id: trade._id,
       item_offered: trade.item_offered,
@@ -213,7 +223,10 @@ router.get('/:tradeId', async (req, res) => {
       roblox_username: trade.user_id.roblox_username,
       credibility_score: trade.user_id.credibility_score,
       user_id: trade.user_id._id,
-      images: trade.images
+      images: trade.images,
+      comment_count: commentCount,
+      upvotes,
+      downvotes
     });
 
   } catch (error) {
@@ -624,116 +637,6 @@ router.post('/:tradeId/comments', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Add trade comment error:', error);
     res.status(500).json({ error: 'Failed to add comment' });
-  }
-});
-
-// Get trade rating
-router.get('/:tradeId/rating', authenticateToken, async (req, res) => {
-  try {
-    const { tradeId } = req.params;
-    const userId = req.user.userId;
-
-    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
-      return res.status(400).json({ error: 'Invalid trade ID' });
-    }
-
-    // Check if trade exists
-    const trade = await Trade.findById(tradeId);
-    if (!trade) {
-      return res.status(404).json({ error: 'Trade not found' });
-    }
-
-    // Get total likes for this trade
-    const totalLikes = await TradeRating.countDocuments({
-      trade_id: tradeId,
-      rating_type: 'like'
-    });
-
-    // Check if current user has liked this trade
-    const userRating = await TradeRating.findOne({
-      trade_id: tradeId,
-      user_id: userId,
-      rating_type: 'like'
-    });
-
-    res.json({
-      likes: totalLikes,
-      userLiked: !!userRating
-    });
-
-  } catch (error) {
-    console.error('Get trade rating error:', error);
-    res.status(500).json({ error: 'Failed to fetch rating' });
-  }
-});
-
-// Toggle trade like
-router.post('/:tradeId/like', authenticateToken, async (req, res) => {
-  try {
-    const { tradeId } = req.params;
-    const userId = req.user.userId;
-
-    console.log('Toggle like request:', { tradeId, userId });
-
-    if (!mongoose.Types.ObjectId.isValid(tradeId)) {
-      return res.status(400).json({ error: 'Invalid trade ID' });
-    }
-
-    // Check if trade exists
-    const trade = await Trade.findById(tradeId);
-    if (!trade) {
-      return res.status(404).json({ error: 'Trade not found' });
-    }
-
-    // Check if user has already liked this trade
-    const existingRating = await TradeRating.findOne({
-      trade_id: tradeId,
-      user_id: userId,
-      rating_type: 'like'
-    });
-
-    let userLiked = false;
-
-    if (existingRating) {
-      // Remove like
-      await TradeRating.deleteOne({ _id: existingRating._id });
-      console.log('Like removed');
-    } else {
-      // Add like
-      const newRating = new TradeRating({
-        trade_id: tradeId,
-        user_id: userId,
-        rating_type: 'like'
-      });
-      
-      await newRating.save();
-      userLiked = true;
-      console.log('Like added');
-    }
-
-    // Get updated total likes
-    const totalLikes = await TradeRating.countDocuments({
-      trade_id: tradeId,
-      rating_type: 'like'
-    });
-
-    console.log('Final like count:', { totalLikes, userLiked });
-
-    res.json({
-      message: 'Like updated successfully',
-      likes: totalLikes,
-      userLiked
-    });
-
-  } catch (error) {
-    console.error('Toggle trade like error:', error);
-    
-    // Handle duplicate key error
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'You have already rated this trade' });
-    }
-    
-    res.status(500).json({ error: 'Failed to update like' });
   }
 });
 

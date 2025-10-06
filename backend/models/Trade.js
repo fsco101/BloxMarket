@@ -57,38 +57,7 @@ const tradeCommentSchema = new mongoose.Schema({
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
 
-// Trade Rating Schema
-const tradeRatingSchema = new mongoose.Schema({
-  trade_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Trade',
-    required: true
-  },
-  rater_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  rated_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  rating: {
-    type: Number,
-    min: 1,
-    max: 5,
-    required: true
-  },
-  comment: {
-    type: String,
-    trim: true
-  }
-}, {
-  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
-});
-
-// Trade Vote Schema (for upvotes/downvotes)
+// Trade Vote Schema (for upvotes/downvotes only)
 const tradeVoteSchema = new mongoose.Schema({
   trade_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -115,5 +84,4 @@ tradeVoteSchema.index({ trade_id: 1, user_id: 1 }, { unique: true });
 // Create models
 export const Trade = mongoose.model('Trade', tradeSchema);
 export const TradeComment = mongoose.model('TradeComment', tradeCommentSchema);
-export const TradeRating = mongoose.model('TradeRating', tradeRatingSchema);
 export const TradeVote = mongoose.model('TradeVote', tradeVoteSchema);
