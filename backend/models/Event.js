@@ -1,75 +1,123 @@
 import mongoose from 'mongoose';
 
+// Event Schema
 const eventSchema = new mongoose.Schema({
   title: {
     type: String,
     required: true,
-    trim: true,
-    maxlength: 255
+    trim: true
   },
   description: {
     type: String,
+    required: true,
     trim: true
   },
   type: {
     type: String,
     enum: ['giveaway', 'competition', 'event'],
-    default: 'event'
+    required: true
   },
   status: {
     type: String,
-    enum: ['active', 'ended', 'upcoming'],
+    enum: ['active', 'ended', 'upcoming', 'ending-soon'],
     default: 'upcoming'
   },
   prizes: [{
-    type: String
+    type: String,
+    trim: true
   }],
   requirements: [{
-    type: String
+    type: String,
+    trim: true
   }],
   maxParticipants: {
-    type: Number
+    type: Number,
+    min: 1
   },
   participantCount: {
     type: Number,
     default: 0
   },
+  startDate: {
+    type: Date,
+    required: true
+  },
+  endDate: {
+    type: Date,
+    required: true
+  },
+  creator: {
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    username: String,
+    avatar: String,
+    verified: Boolean
+  },
   participants: [{
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    username: String,
+    avatar: String,
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
+}, {
+  timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }
+});
+
+// Event Comment Schema
+const eventCommentSchema = new mongoose.Schema({
+  event_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  start_date: {
-    type: Date
+    ref: 'Event',
+    required: true
   },
-  end_date: {
-    type: Date
-  },
-  created_by: {
+  user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  content: {
+    type: String,
+    required: true,
+    trim: true
   }
 }, {
-  timestamps: true
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
 
-// Virtual to determine status based on dates
-eventSchema.virtual('computedStatus').get(function() {
-  const now = new Date();
-  if (this.end_date && now > this.end_date) {
-    return 'ended';
+// Event Vote Schema (for upvotes/downvotes)
+const eventVoteSchema = new mongoose.Schema({
+  event_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    required: true
+  },
+  user_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  vote_type: {
+    type: String,
+    enum: ['up', 'down'],
+    required: true
   }
-  if (this.start_date && now < this.start_date) {
-    return 'upcoming';
-  }
-  return 'active';
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
 
-// Update status before saving
-eventSchema.pre('save', function() {
-  if (this.isNew || this.isModified('start_date') || this.isModified('end_date')) {
-    this.status = this.computedStatus;
-  }
-});
+// Ensure one vote per user per event
+eventVoteSchema.index({ event_id: 1, user_id: 1 }, { unique: true });
 
+// Create models
 export const Event = mongoose.model('Event', eventSchema);
+export const EventComment = mongoose.model('EventComment', eventCommentSchema);
+export const EventVote = mongoose.model('EventVote', eventVoteSchema);

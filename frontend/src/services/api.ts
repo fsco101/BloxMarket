@@ -664,6 +664,96 @@ class ApiService {
     console.log('Trade vote response:', data);
     return data;
   }
+
+  // Event voting methods
+  async getEventVotes(eventId: string) {
+    console.log('Fetching event votes:', eventId);
+    
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/votes`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get event votes error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Event votes data:', data);
+    return data;
+  }
+
+  async voteEvent(eventId: string, voteType: 'up' | 'down') {
+    console.log('Voting on event:', { eventId, voteType });
+    
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/vote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ voteType })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Vote event error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Event vote response:', data);
+    return data;
+  }
+
+  // Event comment methods
+  async getEventComments(eventId: string) {
+    console.log('Fetching event comments:', eventId);
+    
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/comments`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get event comments error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Event comments data:', data);
+    return data;
+  }
+
+  async addEventComment(eventId: string, content: string) {
+    console.log('Adding event comment:', { eventId, content });
+    
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: JSON.stringify({ content })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Add event comment error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Event comment response:', data);
+    return data;
+  }
 }
 
 export const apiService = new ApiService();
