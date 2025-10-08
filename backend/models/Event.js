@@ -46,6 +46,14 @@ const eventSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  // Add images field
+  images: [{
+    filename: String,
+    originalName: String,
+    path: String,
+    size: Number,
+    mimetype: String
+  }],
   creator: {
     user_id: {
       type: mongoose.Schema.Types.ObjectId,
@@ -93,7 +101,7 @@ const eventCommentSchema = new mongoose.Schema({
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
 
-// Event Vote Schema (for upvotes/downvotes)
+// Event Vote Schema
 const eventVoteSchema = new mongoose.Schema({
   event_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -117,7 +125,6 @@ const eventVoteSchema = new mongoose.Schema({
 // Ensure one vote per user per event
 eventVoteSchema.index({ event_id: 1, user_id: 1 }, { unique: true });
 
-// Create models
 export const Event = mongoose.model('Event', eventSchema);
 export const EventComment = mongoose.model('EventComment', eventCommentSchema);
 export const EventVote = mongoose.model('EventVote', eventVoteSchema);

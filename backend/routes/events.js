@@ -1,10 +1,52 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { Event, EventComment, EventVote } from '../models/Event.js';
 import { User } from '../models/User.js';
 import { authenticateToken } from './auth.js';
 
 const router = express.Router();
+
+// Configure multer for event image uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = './uploads/event';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'event-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 5 // Maximum 5 files
+  },
+  fileFilter: function (req, file, cb) {
+    // Check file type
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    
+    // Check file extension
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      return cb(new Error('Invalid file extension'));
+    }
+    
+    cb(null, true);
+  }
+});
 
 // Get all events with vote and comment counts
 router.get('/', async (req, res) => {
@@ -16,8 +58,8 @@ router.get('/', async (req, res) => {
     const skip = (page - 1) * limit;
 
     let query = {};
-    if (type) query.type = type;
-    if (status) query.status = status;
+    if (type && type !== 'all') query.type = type;
+    if (status && status !== 'all') query.status = status;
 
     const events = await Event.find(query)
       .sort({ createdAt: -1 })
@@ -94,20 +136,39 @@ router.get('/:eventId', async (req, res) => {
   }
 });
 
-// Create new event (protected - admin/moderator only)
-router.post('/', authenticateToken, async (req, res) => {
+// Create new event with image upload (protected - admin/moderator only)
+router.post('/', authenticateToken, upload.array('images', 5), async (req, res) => {
   try {
     const userId = req.user.userId;
     const { title, description, type, startDate, endDate, prizes, requirements, maxParticipants } = req.body;
+    const uploadedFiles = req.files;
+
+    console.log('Create event request:', { title, type, filesCount: uploadedFiles?.length || 0 });
 
     // Check if user is admin or moderator
     const user = await User.findById(userId);
     if (!user || !['admin', 'moderator'].includes(user.role)) {
+      // Clean up uploaded files if user is not authorized
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(403).json({ error: 'Only admins and moderators can create events' });
     }
 
     // Validate required fields
     if (!title || !description || !type || !startDate || !endDate) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -115,7 +176,49 @@ router.post('/', authenticateToken, async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     if (start >= end) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(400).json({ error: 'End date must be after start date' });
+    }
+
+    // Process uploaded images
+    const images = [];
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      uploadedFiles.forEach(file => {
+        images.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.path,
+          size: file.size,
+          mimetype: file.mimetype
+        });
+      });
+    }
+
+    // Parse prizes and requirements from strings
+    let parsedPrizes = [];
+    let parsedRequirements = [];
+
+    if (prizes) {
+      if (typeof prizes === 'string') {
+        parsedPrizes = prizes.split(',').map(p => p.trim()).filter(p => p);
+      } else if (Array.isArray(prizes)) {
+        parsedPrizes = prizes.filter(p => p && p.trim());
+      }
+    }
+
+    if (requirements) {
+      if (typeof requirements === 'string') {
+        parsedRequirements = requirements.split(',').map(r => r.trim()).filter(r => r);
+      } else if (Array.isArray(requirements)) {
+        parsedRequirements = requirements.filter(r => r && r.trim());
+      }
     }
 
     const newEvent = new Event({
@@ -124,9 +227,10 @@ router.post('/', authenticateToken, async (req, res) => {
       type,
       startDate: start,
       endDate: end,
-      prizes: prizes || [],
-      requirements: requirements || [],
-      maxParticipants,
+      prizes: parsedPrizes,
+      requirements: parsedRequirements,
+      maxParticipants: maxParticipants ? parseInt(maxParticipants) : undefined,
+      images: images,
       creator: {
         user_id: userId,
         username: user.username,
@@ -136,37 +240,148 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     const savedEvent = await newEvent.save();
+    
+    console.log('Event created successfully:', savedEvent._id);
+    
     res.status(201).json({
       message: 'Event created successfully',
-      eventId: savedEvent._id
+      eventId: savedEvent._id,
+      imagesUploaded: images.length
     });
 
   } catch (error) {
     console.error('Create event error:', error);
+    
+    // Clean up uploaded files on error
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({ error: 'Too many files. Maximum 5 images per event.' });
+    }
+    if (error.message === 'Only image files are allowed') {
+      return res.status(400).json({ error: 'Only image files are allowed' });
+    }
+    
     res.status(500).json({ error: 'Failed to create event' });
   }
 });
 
-// Update event (protected - admin/moderator only)
-router.put('/:eventId', authenticateToken, async (req, res) => {
+// Update event with image upload (protected - admin/moderator only)
+router.put('/:eventId', authenticateToken, upload.array('images', 5), async (req, res) => {
   try {
     const { eventId } = req.params;
     const userId = req.user.userId;
-    const { title, description, type, startDate, endDate, prizes, requirements, maxParticipants } = req.body;
+    const { title, description, type, startDate, endDate, prizes, requirements, maxParticipants, removeImages } = req.body;
+    const uploadedFiles = req.files;
+
+    console.log('Update event request:', { eventId, filesCount: uploadedFiles?.length || 0 });
 
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(400).json({ error: 'Invalid event ID' });
     }
 
     // Check if user is admin or moderator
     const user = await User.findById(userId);
     if (!user || !['admin', 'moderator'].includes(user.role)) {
+      // Clean up uploaded files if user is not authorized
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(403).json({ error: 'Only admins and moderators can update events' });
     }
 
     const event = await Event.findById(eventId);
     if (!event) {
+      // Clean up uploaded files if event not found
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // Handle image removal
+    let currentImages = [...(event.images || [])];
+    if (removeImages) {
+      const imagesToRemove = Array.isArray(removeImages) ? removeImages : [removeImages];
+      imagesToRemove.forEach(filename => {
+        const imageIndex = currentImages.findIndex(img => img.filename === filename);
+        if (imageIndex > -1) {
+          const imagePath = currentImages[imageIndex].path;
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+          }
+          currentImages.splice(imageIndex, 1);
+        }
+      });
+    }
+
+    // Process new uploaded images
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      // Check if adding new images would exceed the limit
+      if (currentImages.length + uploadedFiles.length > 5) {
+        // Clean up uploaded files if would exceed limit
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+        return res.status(400).json({ error: 'Maximum 5 images allowed per event' });
+      }
+
+      uploadedFiles.forEach(file => {
+        currentImages.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.path,
+          size: file.size,
+          mimetype: file.mimetype
+        });
+      });
+    }
+
+    // Parse prizes and requirements
+    let parsedPrizes = event.prizes || [];
+    let parsedRequirements = event.requirements || [];
+
+    if (prizes !== undefined) {
+      if (typeof prizes === 'string') {
+        parsedPrizes = prizes.split(',').map(p => p.trim()).filter(p => p);
+      } else if (Array.isArray(prizes)) {
+        parsedPrizes = prizes.filter(p => p && p.trim());
+      }
+    }
+
+    if (requirements !== undefined) {
+      if (typeof requirements === 'string') {
+        parsedRequirements = requirements.split(',').map(r => r.trim()).filter(r => r);
+      } else if (Array.isArray(requirements)) {
+        parsedRequirements = requirements.filter(r => r && r.trim());
+      }
     }
 
     // Update event data
@@ -176,22 +391,54 @@ router.put('/:eventId', authenticateToken, async (req, res) => {
       type: type || event.type,
       startDate: startDate ? new Date(startDate) : event.startDate,
       endDate: endDate ? new Date(endDate) : event.endDate,
-      prizes: prizes !== undefined ? prizes : event.prizes,
-      requirements: requirements !== undefined ? requirements : event.requirements,
-      maxParticipants: maxParticipants !== undefined ? maxParticipants : event.maxParticipants,
+      prizes: parsedPrizes,
+      requirements: parsedRequirements,
+      maxParticipants: maxParticipants !== undefined ? (maxParticipants ? parseInt(maxParticipants) : undefined) : event.maxParticipants,
+      images: currentImages,
       updatedAt: new Date()
     };
 
     // Validate dates if provided
     if (updateData.startDate >= updateData.endDate) {
+      // Clean up uploaded files if validation fails
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        uploadedFiles.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
       return res.status(400).json({ error: 'End date must be after start date' });
     }
 
     await Event.findByIdAndUpdate(eventId, updateData);
-    res.json({ message: 'Event updated successfully' });
+    
+    console.log('Event updated successfully:', eventId);
+    
+    res.json({ 
+      message: 'Event updated successfully',
+      imagesUploaded: uploadedFiles?.length || 0
+    });
 
   } catch (error) {
     console.error('Update event error:', error);
+    
+    // Clean up uploaded files on error
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({ error: 'Too many files. Maximum 5 images per event.' });
+    }
+    
     res.status(500).json({ error: 'Failed to update event' });
   }
 });
@@ -217,6 +464,15 @@ router.delete('/:eventId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
+    // Delete event images from filesystem
+    if (event.images && event.images.length > 0) {
+      event.images.forEach(image => {
+        if (fs.existsSync(image.path)) {
+          fs.unlinkSync(image.path);
+        }
+      });
+    }
+
     // Delete related comments and votes
     await Promise.all([
       EventComment.deleteMany({ event_id: eventId }),
@@ -224,11 +480,64 @@ router.delete('/:eventId', authenticateToken, async (req, res) => {
     ]);
 
     await Event.findByIdAndDelete(eventId);
+    
+    console.log('Event deleted successfully:', eventId);
+    
     res.json({ message: 'Event deleted successfully' });
 
   } catch (error) {
     console.error('Delete event error:', error);
     res.status(500).json({ error: 'Failed to delete event' });
+  }
+});
+
+// Serve event images
+router.get('/images/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    
+    // Sanitize filename to prevent path traversal
+    const sanitizedFilename = path.basename(filename);
+    const filepath = path.join(process.cwd(), 'uploads', 'event', sanitizedFilename);
+    
+    // Check if file exists
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+    
+    // Determine content type based on file extension
+    const ext = path.extname(sanitizedFilename).toLowerCase();
+    let contentType = 'image/jpeg'; // default
+    
+    switch (ext) {
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+      case '.webp':
+        contentType = 'image/webp';
+        break;
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      default:
+        return res.status(400).json({ error: 'Unsupported file type' });
+    }
+    
+    // Set headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours cache
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    // Send file
+    res.sendFile(filepath);
+    
+  } catch (error) {
+    console.error('Serve event image error:', error);
+    res.status(500).json({ error: 'Failed to serve image' });
   }
 });
 
