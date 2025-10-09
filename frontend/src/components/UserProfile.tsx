@@ -31,7 +31,6 @@ interface ProfileData {
   totalVouches: number;
   credibility_score: number;
   totalWishlistItems: number;
-  recentTrades: Trade[];
   vouches: Vouch[];
   achievements: Achievement[];
 }
@@ -39,11 +38,31 @@ interface ProfileData {
 interface Trade {
   _id: string;
   title: string;
-  status: 'completed' | 'active' | 'pending' | 'cancelled';
+  status: 'completed' | 'active' | 'pending' | 'cancelled' | 'disputed';
   created_at: string;
+  updated_at?: string;
   item_offered?: string;
   item_requested?: string;
   trade_value?: number;
+  trade_type?: 'sell' | 'buy' | 'trade';
+  other_user_id?: string;
+  other_user_name?: string;
+  creator_id: string;
+  acceptor_id?: string;
+  is_creator: boolean; // Whether the current user created this trade
+  trade_direction: 'outgoing' | 'incoming'; // Whether user initiated or received the trade
+}
+
+interface TradeHistory {
+  trades: Trade[];
+  totalTrades: number;
+  completedTrades: number;
+  activeTrades: number;
+  pendingTrades: number;
+  cancelledTrades: number;
+  disputedTrades: number;
+  successRate: number;
+  totalValue: number;
 }
 
 interface WishlistItem {
@@ -81,25 +100,26 @@ interface EditFormData {
   timezone: string;
   robloxUsername: string;
 }
+
 import { 
- 
   Star, 
   Calendar, 
   MessageSquare, 
   TrendingUp,
-
   Edit,
-
   Heart,
   Clock,
   CheckCircle,
-
   Loader2,
   AlertCircle,
   Camera,
   Save,
   X,
-  Trophy
+  Trophy,
+  ArrowUpRight,
+  ArrowDownLeft,
+  RefreshCw,
+  Filter
 } from 'lucide-react';
 
 export function UserProfile() {
@@ -110,10 +130,13 @@ export function UserProfile() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [tradeHistory, setTradeHistory] = useState<TradeHistory | null>(null);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [tradeFilter, setTradeFilter] = useState<'all' | 'completed' | 'active' | 'pending'>('all');
+  const [loadingTrades, setLoadingTrades] = useState(false);
   
   // Add flags to prevent duplicate API calls
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -128,6 +151,81 @@ export function UserProfile() {
     timezone: '',
     robloxUsername: ''
   });
+
+  // Load user trade history
+  const loadTradeHistory = async (userId: string) => {
+    if (loadingTrades) {
+      console.log('Trade history already loading, skipping...');
+      return;
+    }
+
+    try {
+      setLoadingTrades(true);
+      console.log('Loading trade history for user:', userId);
+      
+      const trades = await apiService.getUserTradeHistory(userId);
+      console.log('Trade history loaded:', trades?.length || 0, 'trades');
+      
+      if (trades && Array.isArray(trades)) {
+        // Process trades to add user-specific context
+        const processedTrades: Trade[] = trades.map(trade => ({
+          ...trade,
+          is_creator: trade.creator_id === userId,
+          trade_direction: trade.creator_id === userId ? 'outgoing' : 'incoming',
+          other_user_name: trade.creator_id === userId ? trade.acceptor_name : trade.creator_name
+        }));
+
+        // Calculate trade statistics
+        const completedTrades = processedTrades.filter(t => t.status === 'completed');
+        const activeTrades = processedTrades.filter(t => t.status === 'active');
+        const pendingTrades = processedTrades.filter(t => t.status === 'pending');
+        const cancelledTrades = processedTrades.filter(t => t.status === 'cancelled');
+        const disputedTrades = processedTrades.filter(t => t.status === 'disputed');
+        
+        const totalValue = completedTrades.reduce((sum, trade) => sum + (trade.trade_value || 0), 0);
+        const successRate = processedTrades.length > 0 
+          ? Math.round((completedTrades.length / processedTrades.length) * 100) 
+          : 0;
+
+        const historyData: TradeHistory = {
+          trades: processedTrades.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+          totalTrades: processedTrades.length,
+          completedTrades: completedTrades.length,
+          activeTrades: activeTrades.length,
+          pendingTrades: pendingTrades.length,
+          cancelledTrades: cancelledTrades.length,
+          disputedTrades: disputedTrades.length,
+          successRate,
+          totalValue
+        };
+
+        setTradeHistory(historyData);
+
+        // Update profile data with trade statistics
+        setProfileData(prev => prev ? {
+          ...prev,
+          totalTrades: historyData.totalTrades,
+          successRate: historyData.successRate
+        } : null);
+      }
+    } catch (err: unknown) {
+      console.error('Error loading trade history:', err);
+      // Don't show error for trade history, it's not critical for profile display
+      setTradeHistory({
+        trades: [],
+        totalTrades: 0,
+        completedTrades: 0,
+        activeTrades: 0,
+        pendingTrades: 0,
+        cancelledTrades: 0,
+        disputedTrades: 0,
+        successRate: 0,
+        totalValue: 0
+      });
+    } finally {
+      setLoadingTrades(false);
+    }
+  };
 
   // Load user data on component mount
   const loadProfileData = async () => {
@@ -156,6 +254,11 @@ export function UserProfile() {
         timezone: data.timezone || '',
         robloxUsername: data.roblox_username || ''
       });
+
+      // Load trade history for this user
+      if (data.id) {
+        await loadTradeHistory(data.id);
+      }
     } catch (err: unknown) {
       console.error('Error loading profile:', err);
       
@@ -189,12 +292,16 @@ export function UserProfile() {
           totalVouches: 0,
           credibility_score: 0,
           totalWishlistItems: 0,
-          recentTrades: [],
           vouches: [],
           achievements: []
         };
         setProfileData(fallbackData);
         setError('');
+        
+        // Try to load trade history even with fallback data
+        if (user.id) {
+          await loadTradeHistory(user.id);
+        }
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load profile data');
       }
@@ -229,7 +336,7 @@ export function UserProfile() {
         setLoading(true);
         setError('');
         
-        // Load profile data
+        // Load profile data (includes trade history now)
         const data = await apiService.getCurrentUser();
         console.log('Profile data loaded successfully:', data?.username);
         
@@ -241,6 +348,11 @@ export function UserProfile() {
           timezone: data.timezone || '',
           robloxUsername: data.roblox_username || ''
         });
+
+        // Load trade history
+        if (data.id) {
+          await loadTradeHistory(data.id);
+        }
         
         setIsLoadingProfile(false);
         setLoading(false);
@@ -304,13 +416,17 @@ export function UserProfile() {
             totalVouches: 0,
             credibility_score: 0,
             totalWishlistItems: 0,
-            recentTrades: [],
             vouches: [],
             achievements: []
           };
           setProfileData(fallbackData);
           setError('');
           hasLoadedInitially.current = true;
+          
+          // Try to load trade history even with fallback data
+          if (user.id) {
+            await loadTradeHistory(user.id);
+          }
         } else {
           setError(err instanceof Error ? err.message : 'Failed to load profile data');
         }
@@ -557,6 +673,30 @@ export function UserProfile() {
     toast.info('Refreshing profile data...');
   };
 
+  // Helper function to get avatar URL
+  const getAvatarUrl = (avatarUrl?: string) => {
+    if (!avatarUrl) return '';
+    
+    // If it's already a full URL, return as is
+    if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+      return avatarUrl;
+    }
+    
+    // If it's a relative path, prepend the backend URL
+    if (avatarUrl.startsWith('/uploads/')) {
+      return `http://localhost:5000${avatarUrl}`;
+    }
+    
+    // If it's just a filename, construct the full path
+    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+  };
+
+  // Filter trades based on current filter
+  const filteredTrades = tradeHistory?.trades.filter(trade => {
+    if (tradeFilter === 'all') return true;
+    return trade.status === tradeFilter;
+  }) || [];
+
   // Show loading state
   if (loading) {
     return (
@@ -584,18 +724,6 @@ export function UserProfile() {
     );
   }
 
-
-
-
-
-
-
-
-
-
-
-  
-
   return (
     <div className="flex-1 overflow-hidden">
       {/* Header */}
@@ -605,8 +733,13 @@ export function UserProfile() {
             <div className="relative group">
               <Avatar className="w-20 h-20 transition-transform group-hover:scale-105">
                 <AvatarImage 
-                  src={avatarPreview || (profileData?.avatar_url ? `http://localhost:5000${profileData.avatar_url}` : '')} 
+                  src={avatarPreview || getAvatarUrl(profileData?.avatar_url)} 
                   className="object-cover"
+                  onError={(e) => {
+                    // If avatar fails to load, remove src to show fallback
+                    const target = e.target as HTMLImageElement;
+                    target.src = '';
+                  }}
                 />
                 <AvatarFallback className="text-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
                   {profileData?.username?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || 'U'}
@@ -684,9 +817,7 @@ export function UserProfile() {
           
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={refreshData}>
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -812,7 +943,10 @@ export function UserProfile() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="trades">Trade History</TabsTrigger>
+              <TabsTrigger value="trades">
+                Trade History
+                {tradeHistory && <Badge variant="outline" className="ml-1">{tradeHistory.totalTrades}</Badge>}
+              </TabsTrigger>
               <TabsTrigger value="wishlist">Wishlist</TabsTrigger>
               <TabsTrigger value="vouches">Vouches</TabsTrigger>
               <TabsTrigger value="achievements">Achievements</TabsTrigger>
@@ -1043,29 +1177,115 @@ export function UserProfile() {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Trade History</h3>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-green-600 border-green-600">
-                    {profileData?.recentTrades?.filter(trade => trade.status === 'completed').length || 0} Completed
-                  </Badge>
-                  <Badge variant="outline" className="text-blue-600 border-blue-600">
-                    {profileData?.recentTrades?.filter(trade => trade.status === 'active').length || 0} Active
-                  </Badge>
+                  <Select value={tradeFilter} onValueChange={(value: any) => setTradeFilter(value)}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Trades</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {tradeHistory && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        {tradeHistory.completedTrades} Completed
+                      </Badge>
+                      <Badge variant="outline" className="text-blue-600 border-blue-600">
+                        {tradeHistory.activeTrades} Active
+                      </Badge>
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                        {tradeHistory.pendingTrades} Pending
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
               
+              {/* Trade Statistics Cards */}
+              {tradeHistory && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-blue-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Trades</p>
+                          <p className="text-2xl font-bold">{tradeHistory.totalTrades}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Success Rate</p>
+                          <p className="text-2xl font-bold text-green-600">{tradeHistory.successRate}%</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 text-yellow-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Value</p>
+                          <p className="text-2xl font-bold text-yellow-600">{tradeHistory.totalValue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-purple-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Avg. Per Trade</p>
+                          <p className="text-2xl font-bold text-purple-600">
+                            {tradeHistory.totalTrades > 0 ? Math.round(tradeHistory.totalValue / tradeHistory.totalTrades).toLocaleString() : '0'}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              
               <Card>
                 <CardContent className="p-0">
-                  {profileData?.recentTrades && profileData.recentTrades.length > 0 ? (
+                  {loadingTrades ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">Loading trade history...</p>
+                    </div>
+                  ) : filteredTrades.length > 0 ? (
                     <div className="divide-y">
-                      {profileData.recentTrades.map((trade, index) => (
+                      {filteredTrades.map((trade, index) => (
                         <div key={trade._id} className="p-4 hover:bg-muted/50 transition-colors">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                              <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                trade.status === 'completed' ? 'bg-green-500' : 
-                                trade.status === 'active' ? 'bg-blue-500 animate-pulse' : 
-                                trade.status === 'pending' ? 'bg-yellow-500' :
-                                'bg-gray-500'
-                              }`} />
+                              <div className="flex items-center gap-2">
+                                <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                  trade.status === 'completed' ? 'bg-green-500' : 
+                                  trade.status === 'active' ? 'bg-blue-500 animate-pulse' : 
+                                  trade.status === 'pending' ? 'bg-yellow-500' :
+                                  trade.status === 'disputed' ? 'bg-red-500' :
+                                  'bg-gray-500'
+                                }`} />
+                                {trade.trade_direction === 'outgoing' ? (
+                                  <ArrowUpRight className="w-4 h-4 text-blue-500" />
+                                ) : (
+                                  <ArrowDownLeft className="w-4 h-4 text-green-500" />
+                                )}
+                              </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-medium truncate">{trade.item_offered || trade.title}</p>
@@ -1077,10 +1297,15 @@ export function UserProfile() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                  <span>#{index + 1}</span>
+                                  <span>#{trade._id.slice(-6)}</span>
                                   <span>{new Date(trade.created_at).toLocaleDateString()}</span>
+                                  {trade.other_user_name && (
+                                    <span className="text-blue-600">
+                                      {trade.trade_direction === 'outgoing' ? 'To:' : 'From:'} {trade.other_user_name}
+                                    </span>
+                                  )}
                                   {trade.trade_value && (
-                                    <span className="text-green-600 font-medium">{trade.trade_value} RAP</span>
+                                    <span className="text-green-600 font-medium">{trade.trade_value.toLocaleString()} RAP</span>
                                   )}
                                 </div>
                               </div>
@@ -1092,11 +1317,17 @@ export function UserProfile() {
                                   trade.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
                                   trade.status === 'active' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
                                   trade.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                  trade.status === 'disputed' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
                                   ''
                                 }`}
                               >
                                 {trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
                               </Badge>
+                              {trade.trade_type && (
+                                <Badge variant="outline" className="text-xs">
+                                  {trade.trade_type.toUpperCase()}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1107,11 +1338,20 @@ export function UserProfile() {
                       <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
                         <TrendingUp className="w-8 h-8 text-muted-foreground" />
                       </div>
-                      <h3 className="text-lg font-medium mb-2">No trades yet</h3>
-                      <p className="text-muted-foreground mb-4">Start trading to build your history and reputation!</p>
-                      <Button variant="outline" onClick={() => setActiveTab('overview')}>
-                        View Profile Stats
-                      </Button>
+                      <h3 className="text-lg font-medium mb-2">
+                        {tradeFilter === 'all' ? 'No trades yet' : `No ${tradeFilter} trades`}
+                      </h3>
+                      <p className="text-muted-foreground mb-4">
+                        {tradeFilter === 'all' 
+                          ? 'Start trading to build your history and reputation!'
+                          : `You don't have any ${tradeFilter} trades at the moment.`
+                        }
+                      </p>
+                      {tradeFilter !== 'all' && (
+                        <Button variant="outline" onClick={() => setTradeFilter('all')}>
+                          View All Trades
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardContent>

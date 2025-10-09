@@ -881,6 +881,10 @@ class ApiService {
     console.log('Event comment response:', data);
     return data;
   }
+
+  async getUserTradeHistory(userId: string) {
+    return this.request(`/users/${userId}/trades`);
+  }
 }
 
 export const apiService = new ApiService();
