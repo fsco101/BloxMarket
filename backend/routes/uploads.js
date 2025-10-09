@@ -178,9 +178,25 @@ router.get('/event/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
     const sanitizedFilename = path.basename(filename);
-    const filepath = path.join(__dirname, '../uploads/event', sanitizedFilename);
     
-    if (!fs.existsSync(filepath)) {
+    // Try multiple possible paths
+    const possiblePaths = [
+      path.join(__dirname, '../uploads/event', sanitizedFilename),
+      path.join(process.cwd(), 'uploads', 'event', sanitizedFilename),
+      path.join(__dirname, '../../uploads/event', sanitizedFilename)
+    ];
+    
+    let filepath = null;
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath)) {
+        filepath = testPath;
+        break;
+      }
+    }
+    
+    if (!filepath) {
+      console.error('Event image not found in any path:', sanitizedFilename);
+      console.error('Tried paths:', possiblePaths);
       return res.status(404).json({ error: 'Image not found' });
     }
     
@@ -208,17 +224,18 @@ router.get('/event/:filename', (req, res) => {
       default:
         return res.status(400).json({ error: 'Unsupported file type' });
     }
-    
+
+    // Set headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', stats.size);
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-    res.setHeader('ETag', `"${stats.mtime.getTime()}"`);
-    res.setHeader('Last-Modified', stats.mtime.toUTCString());
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    res.setHeader('ETag', `"${stats.mtime.getTime()}-${stats.size}"`);
     
-    const ifNoneMatch = req.headers['if-none-match'];
+    // Check if client has cached version
+    const clientETag = req.headers['if-none-match'];
     const ifModifiedSince = req.headers['if-modified-since'];
     
-    if (ifNoneMatch === `"${stats.mtime.getTime()}"` || 
+    if ((clientETag && clientETag === `"${stats.mtime.getTime()}-${stats.size}"`) ||
         (ifModifiedSince && new Date(ifModifiedSince) >= stats.mtime)) {
       return res.status(304).end();
     }
@@ -226,7 +243,7 @@ router.get('/event/:filename', (req, res) => {
     const readStream = fs.createReadStream(filepath);
     
     readStream.on('error', (err) => {
-      console.error('Error reading image file:', err);
+      console.error('Error reading event image file:', err);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Failed to read image file' });
       }
