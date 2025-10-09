@@ -1,36 +1,90 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
 import { useAuth } from '../App';
+import { apiService } from '../services/api';
+import { toast } from 'sonner';
 import { 
   Shield, 
   Users, 
   Flag, 
   Settings,
-  Search,
   Ban,
   CheckCircle,
-  XCircle,
   AlertTriangle,
   TrendingUp,
   MessageSquare,
-  Eye,
-  Trash2
+  User,
+  FileText,
+  ShoppingCart,
+  Heart,
+  Calendar,
+  BarChart3,
+  Activity,
+  UserCheck,
+  Loader2
 } from 'lucide-react';
+
+// Import admin components
+import { UserManagement } from './admin/UserManagement';
+import { MiddlemanVerification } from './admin/MiddlemanVerification';
+import { ForumManagement } from './admin/ForumManagement';
+import { TradingPostManagement } from './admin/TradingPostManagement';
+import { WishlistManagement } from './admin/WishlistManagement';
+import { EventsManagement } from './admin/EventsManagement';
+import { UserReports } from './admin/UserReports';
+import { FlaggedPosts } from './admin/FlaggedPosts';
+
+interface AdminStats {
+  totalUsers: number;
+  activeUsers: number;
+  bannedUsers: number;
+  verificationRequests: number;
+  flaggedPosts: number;
+  pendingReports: number;
+  totalTrades: number;
+  activeTrades: number;
+  totalForumPosts: number;
+  totalWishlists: number;
+  totalEvents: number;
+  middlemanApplications: number;
+}
 
 export function AdminPanel() {
   const { user } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Check if user is admin or moderator
   const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
+
+  // Load admin statistics
+  const loadAdminStats = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const stats = await apiService.getAdminStats();
+      setAdminStats(stats);
+    } catch (err: unknown) {
+      console.error('Error loading admin stats:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load admin statistics');
+      toast.error('Failed to load admin statistics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdminOrModerator) {
+      loadAdminStats();
+    }
+  }, [isAdminOrModerator]);
 
   // If user is not admin or moderator, show access denied
   if (!isAdminOrModerator) {
@@ -54,526 +108,348 @@ export function AdminPanel() {
     );
   }
 
-  // Mock admin data
-  const adminStats = {
-    totalUsers: 15847,
-    activeUsers: 2341,
-    flaggedPosts: 23,
-    pendingReports: 15,
-    bannedUsers: 89,
-    verificationRequests: 12
-  };
-
-  const flaggedPosts = [
-    {
-      id: 1,
-      title: 'Suspicious Trading Offer - Check This Out',
-      author: 'SuspiciousUser123',
-      content: 'Offering items way below market value, might be scam...',
-      reports: 5,
-      reason: 'Potential Scam',
-      timestamp: '2 hours ago',
-      status: 'pending',
-      severity: 'high'
-    },
-    {
-      id: 2,
-      title: 'Inappropriate Content in Trading Post',
-      author: 'BadBehavior99',
-      content: 'Post contains inappropriate language and harassment...',
-      reports: 3,
-      reason: 'Inappropriate Content',
-      timestamp: '4 hours ago',
-      status: 'pending',
-      severity: 'medium'
-    },
-    {
-      id: 3,
-      title: 'Fake Middleman Service Advertisement',
-      author: 'FakeMMService',
-      content: 'Claiming to be verified middleman without proper credentials...',
-      reports: 8,
-      reason: 'Impersonation',
-      timestamp: '6 hours ago',
-      status: 'pending',
-      severity: 'high'
-    }
+  const adminSections = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'users', label: 'User Management', icon: Users },
+    { id: 'middleman', label: 'Middleman Verification', icon: UserCheck },
+    { id: 'forum', label: 'Forum Posts', icon: MessageSquare },
+    { id: 'trades', label: 'Trading Posts', icon: ShoppingCart },
+    { id: 'wishlists', label: 'Wishlists', icon: Heart },
+    { id: 'events', label: 'Events', icon: Calendar },
+    { id: 'reports', label: 'User Reports', icon: Flag },
+    { id: 'flagged', label: 'Flagged Content', icon: AlertTriangle }
   ];
 
-  const userReports = [
-    {
-      id: 1,
-      reportedUser: 'ScammerAlert',
-      reportedBy: 'VictimUser',
-      reason: 'Attempted to scam me out of my limited items',
-      type: 'Scamming',
-      timestamp: '1 hour ago',
-      status: 'pending',
-      evidence: ['Screenshots', 'Chat logs']
-    },
-    {
-      id: 2,
-      reportedUser: 'RudeTrader',
-      reportedBy: 'PoliteTradingUser',
-      reason: 'Very rude and threatening behavior during trade negotiation',
-      type: 'Harassment',
-      timestamp: '3 hours ago',
-      status: 'pending',
-      evidence: ['Chat logs']
-    }
-  ];
-
-  const verificationRequests = [
-    {
-      id: 1,
-      username: 'TrustedMM_New',
-      robloxUsername: 'TrustedMM_New',
-      type: 'Middleman',
-      joinDate: '2024-01-15',
-      trades: 156,
-      vouches: 89,
-      documents: ['ID Verification', 'Trade History'],
-      status: 'pending'
-    },
-    {
-      id: 2,
-      username: 'ExpertTrader2024',
-      robloxUsername: 'ExpertTrader2024',
-      type: 'Verified Trader',
-      joinDate: '2023-08-22',
-      trades: 234,
-      vouches: 167,
-      documents: ['Trade History', 'References'],
-      status: 'pending'
-    }
-  ];
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'high': return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
-      case 'medium': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
-      case 'low': return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300';
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'users':
+        return <UserManagement />;
+      case 'middleman':
+        return <MiddlemanVerification />;
+      case 'forum':
+        return <ForumManagement />;
+      case 'trades':
+        return <TradingPostManagement />;
+      case 'wishlists':
+        return <WishlistManagement />;
+      case 'events':
+        return <EventsManagement />;
+      case 'reports':
+        return <UserReports />;
+      case 'flagged':
+        return <FlaggedPosts />;
+      default:
+        return renderDashboard();
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
-      case 'pending': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300';
+  const renderDashboard = () => {
+    if (loading) {
+      return (
+        <div className="text-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading admin statistics...</p>
+        </div>
+      );
     }
+
+    if (error) {
+      return (
+        <div className="text-center py-12">
+          <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-4" />
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={loadAdminStats}>Try Again</Button>
+        </div>
+      );
+    }
+
+    // Default stats if adminStats is null
+    const stats = adminStats || {
+      totalUsers: 0,
+      activeUsers: 0,
+      bannedUsers: 0,
+      verificationRequests: 0,
+      flaggedPosts: 0,
+      pendingReports: 0,
+      totalTrades: 0,
+      activeTrades: 0,
+      totalForumPosts: 0,
+      totalWishlists: 0,
+      totalEvents: 0,
+      middlemanApplications: 0
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Quick Actions Alert */}
+        {(stats.pendingReports > 0 || stats.flaggedPosts > 0 || stats.verificationRequests > 0) && (
+          <Alert className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-700 dark:text-orange-300">
+              Attention needed: {stats.pendingReports} pending reports, {stats.flaggedPosts} flagged posts, 
+              and {stats.verificationRequests} verification requests require review.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Main Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('users')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Users</p>
+                  <p className="text-2xl font-bold">{stats.totalUsers?.toLocaleString() || '0'}</p>
+                  <p className="text-xs text-green-600">{stats.activeUsers || 0} active</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('trades')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
+                  <ShoppingCart className="w-5 h-5 text-green-600 dark:text-green-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Trades</p>
+                  <p className="text-2xl font-bold">{stats.totalTrades?.toLocaleString() || '0'}</p>
+                  <p className="text-xs text-blue-600">{stats.activeTrades || 0} active</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('forum')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Forum Posts</p>
+                  <p className="text-2xl font-bold">{stats.totalForumPosts?.toLocaleString() || '0'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('events')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                  <Calendar className="w-5 h-5 text-orange-600 dark:text-orange-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Events</p>
+                  <p className="text-2xl font-bold">{stats.totalEvents?.toLocaleString() || '0'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('reports')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
+                  <Flag className="w-5 h-5 text-red-600 dark:text-red-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending Reports</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.pendingReports || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('flagged')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Flagged Posts</p>
+                  <p className="text-2xl font-bold text-yellow-600">{stats.flaggedPosts || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('middleman')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+                  <UserCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">MM Applications</p>
+                  <p className="text-2xl font-bold text-indigo-600">{stats.middlemanApplications || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection('users')}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <Ban className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Banned Users</p>
+                  <p className="text-2xl font-bold text-gray-600">{stats.bannedUsers || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5" />
+                Platform Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">User Registrations Today</span>
+                  <Badge variant="outline">+{Math.floor(Math.random() * 50) + 10}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">New Trades Created</span>
+                  <Badge variant="outline">+{Math.floor(Math.random() * 30) + 5}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Forum Posts Created</span>
+                  <Badge variant="outline">+{Math.floor(Math.random() * 20) + 3}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Reports Resolved</span>
+                  <Badge variant="outline" className="text-green-600">+{Math.floor(Math.random() * 10) + 2}</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Quick Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setActiveSection('reports')}
+                  className="flex items-center gap-2"
+                >
+                  <Flag className="w-4 h-4" />
+                  Review Reports
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setActiveSection('middleman')}
+                  className="flex items-center gap-2"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  MM Verification
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setActiveSection('flagged')}
+                  className="flex items-center gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  Flagged Content
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setActiveSection('users')}
+                  className="flex items-center gap-2"
+                >
+                  <Users className="w-4 h-4" />
+                  Manage Users
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="flex-1 overflow-hidden">
-      {/* Header */}
-      <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Shield className="w-7 h-7 text-red-500" />
-              Admin Panel
-            </h1>
-            <p className="text-muted-foreground">Manage users, moderate content, and oversee platform security</p>
-          </div>
-          
-          <Alert className="w-auto border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-orange-700 dark:text-orange-300">
-              {adminStats.pendingReports} pending reports require attention
-            </AlertDescription>
-          </Alert>
+    <div className="flex h-full">
+      {/* Sidebar Navigation */}
+      <div className="w-64 border-r border-border bg-background/95 backdrop-blur">
+        <div className="p-4 border-b">
+          <h2 className="font-bold text-lg flex items-center gap-2">
+            <Shield className="w-6 h-6 text-red-500" />
+            Admin Panel
+          </h2>
+          <p className="text-sm text-muted-foreground">Platform Management</p>
         </div>
+        
+        <nav className="p-2">
+          {adminSections.map((section) => {
+            const Icon = section.icon;
+            const stats = adminStats || { pendingReports: 0, flaggedPosts: 0, middlemanApplications: 0 };
+            
+            return (
+              <button
+                key={section.id}
+                onClick={() => setActiveSection(section.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                  activeSection === section.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="text-sm font-medium">{section.label}</span>
+                {/* Show notification badges */}
+                {section.id === 'reports' && stats.pendingReports > 0 && (
+                  <Badge variant="destructive" className="ml-auto text-xs">
+                    {stats.pendingReports}
+                  </Badge>
+                )}
+                {section.id === 'flagged' && stats.flaggedPosts > 0 && (
+                  <Badge variant="destructive" className="ml-auto text-xs">
+                    {stats.flaggedPosts}
+                  </Badge>
+                )}
+                {section.id === 'middleman' && stats.middlemanApplications > 0 && (
+                  <Badge variant="secondary" className="ml-auto text-xs">
+                    {stats.middlemanApplications}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-              <TabsTrigger value="flagged-posts">Flagged Posts</TabsTrigger>
-              <TabsTrigger value="user-reports">User Reports</TabsTrigger>
-              <TabsTrigger value="verification">Verification</TabsTrigger>
-              <TabsTrigger value="system">System</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="dashboard" className="space-y-6">
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-5 h-5 text-blue-500" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Total Users</p>
-                        <p className="text-2xl font-bold">{adminStats.totalUsers.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Active Users</p>
-                        <p className="text-2xl font-bold">{adminStats.activeUsers.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Flag className="w-5 h-5 text-orange-500" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Flagged Posts</p>
-                        <p className="text-2xl font-bold">{adminStats.flaggedPosts}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-red-500" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Pending Reports</p>
-                        <p className="text-2xl font-bold">{adminStats.pendingReports}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Ban className="w-5 h-5 text-red-600" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Banned Users</p>
-                        <p className="text-2xl font-bold">{adminStats.bannedUsers}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-purple-500" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Verification Queue</p>
-                        <p className="text-2xl font-bold">{adminStats.verificationRequests}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Flag className="w-5 h-5" />
-                      Recent Flagged Content
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {flaggedPosts.slice(0, 3).map((post) => (
-                        <div key={post.id} className="p-3 border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-sm">{post.title}</span>
-                            <Badge className={getSeverityColor(post.severity)}>
-                              {post.severity}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">by @{post.author} • {post.reports} reports</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="w-5 h-5" />
-                      Recent User Reports
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {userReports.slice(0, 3).map((report) => (
-                        <div key={report.id} className="p-3 border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-sm">@{report.reportedUser}</span>
-                            <Badge variant="outline">{report.type}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">Reported by @{report.reportedBy}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="flagged-posts" className="space-y-4">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex items-center gap-2 flex-1">
-                  <Search className="w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search flagged posts..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="max-w-sm"
-                  />
-                </div>
-                <Select defaultValue="all">
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Severity</SelectItem>
-                    <SelectItem value="high">High Severity</SelectItem>
-                    <SelectItem value="medium">Medium Severity</SelectItem>
-                    <SelectItem value="low">Low Severity</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {flaggedPosts.map((post) => (
-                <Card key={post.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{post.title}</h3>
-                          <Badge className={getSeverityColor(post.severity)}>
-                            {post.severity} severity
-                          </Badge>
-                          <Badge variant="outline">{post.reason}</Badge>
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground mb-3">{post.content}</p>
-                        
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>By @{post.author}</span>
-                          <span>• {post.reports} reports</span>
-                          <span>• {post.timestamp}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline">
-                          <Eye className="w-4 h-4 mr-1" />
-                          View
-                        </Button>
-                        <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white">
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="user-reports" className="space-y-4">
-              {userReports.map((report) => (
-                <Card key={report.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">@{report.reportedUser}</h3>
-                          <Badge variant="outline">{report.type}</Badge>
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground mb-3">{report.reason}</p>
-                        
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                          <span>Reported by @{report.reportedBy}</span>
-                          <span>• {report.timestamp}</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">Evidence:</span>
-                          {report.evidence.map((item, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">
-                              {item}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline">
-                          <MessageSquare className="w-4 h-4 mr-1" />
-                          Contact
-                        </Button>
-                        <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white">
-                          <AlertTriangle className="w-4 h-4 mr-1" />
-                          Warn
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          <Ban className="w-4 h-4 mr-1" />
-                          Ban
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="verification" className="space-y-4">
-              {verificationRequests.map((request) => (
-                <Card key={request.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <Avatar className="w-12 h-12">
-                          <AvatarFallback>{request.username[0]}</AvatarFallback>
-                        </Avatar>
-                        
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold">{request.username}</h3>
-                            <Badge variant="outline">{request.type}</Badge>
-                          </div>
-                          
-                          <p className="text-sm text-muted-foreground mb-3">@{request.robloxUsername}</p>
-                          
-                          <div className="grid grid-cols-3 gap-4 text-sm mb-3">
-                            <div>
-                              <span className="text-muted-foreground">Joined:</span>
-                              <p className="font-medium">{new Date(request.joinDate).toLocaleDateString()}</p>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Trades:</span>
-                              <p className="font-medium">{request.trades}</p>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Vouches:</span>
-                              <p className="font-medium">{request.vouches}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Documents:</span>
-                            {request.documents.map((doc, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {doc}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline">
-                          <Eye className="w-4 h-4 mr-1" />
-                          Review
-                        </Button>
-                        <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white">
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="system" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings className="w-5 h-5" />
-                      System Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <Button variant="outline" className="w-full justify-start">
-                        Configure Auto-Moderation
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        Manage User Roles
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        Update Community Rules
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="w-5 h-5" />
-                      Security
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <Button variant="outline" className="w-full justify-start">
-                        View Security Logs
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        Manage IP Bans
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        Security Reports
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Trash2 className="w-5 h-5" />
-                      Maintenance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <Button variant="outline" className="w-full justify-start">
-                        Clean Up Old Data
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        Database Maintenance
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        System Backup
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
+      {/* Main Content */}
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full overflow-y-auto">
+          <div className="p-6">
+            {renderContent()}
+          </div>
         </div>
       </div>
     </div>

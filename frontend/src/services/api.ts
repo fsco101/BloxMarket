@@ -598,90 +598,52 @@ class ApiService {
     return this.request('/admin/stats');
   }
 
-  async getAllUsers(params?: { page?: number; limit?: number; search?: string; role?: string }) {
-    const queryString = params ? new URLSearchParams(
-      Object.entries(params).reduce((acc, [key, value]) => {
-        if (value !== undefined) acc[key] = value.toString();
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString() : '';
-    return this.request(`/admin/users?${queryString}`);
-  }
+  async getUsers(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: string;
+    status?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.search) queryParams.append('search', params.search);
+    if (params.role) queryParams.append('role', params.role);
+    if (params.status) queryParams.append('status', params.status);
 
-  async getReports(params?: { page?: number; limit?: number; status?: string }) {
-    const queryString = params ? new URLSearchParams(
-      Object.entries(params).reduce((acc, [key, value]) => {
-        if (value !== undefined) acc[key] = value.toString();
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString() : '';
-    return this.request(`/admin/reports?${queryString}`);
-  }
-
-  async getFlaggedPosts(params?: { page?: number; limit?: number; severity?: string }) {
-    const queryString = params ? new URLSearchParams(
-      Object.entries(params).reduce((acc, [key, value]) => {
-        if (value !== undefined) acc[key] = value.toString();
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString() : '';
-    return this.request(`/admin/flagged-posts?${queryString}`);
-  }
-
-  async getVerificationRequests(params?: { page?: number; limit?: number }) {
-    const queryString = params ? new URLSearchParams(
-      Object.entries(params).reduce((acc, [key, value]) => {
-        if (value !== undefined) acc[key] = value.toString();
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString() : '';
-    return this.request(`/admin/verification-requests?${queryString}`);
-  }
-
-  async banUser(userId: string, reason?: string) {
-    return this.request(`/admin/users/${userId}/ban`, {
-      method: 'PATCH',
-      body: JSON.stringify({ action: 'ban', reason }),
-    });
-  }
-
-  async unbanUser(userId: string) {
-    return this.request(`/admin/users/${userId}/ban`, {
-      method: 'PATCH',
-      body: JSON.stringify({ action: 'unban' }),
-    });
+    return this.request(`/admin/users?${queryParams.toString()}`);
   }
 
   async updateUserRole(userId: string, role: string) {
     return this.request(`/admin/users/${userId}/role`, {
       method: 'PATCH',
-      body: JSON.stringify({ role }),
+      body: JSON.stringify({ role })
     });
   }
 
-  async updateReportStatus(reportId: string, status: string, action?: string) {
-    return this.request(`/admin/reports/${reportId}`, {
+  async banUser(userId: string, action: 'ban' | 'unban', reason?: string) {
+    return this.request(`/admin/users/${userId}/ban`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, action }),
+      body: JSON.stringify({ action, reason })
     });
   }
 
-  async deleteFlaggedPost(postId: string) {
-    return this.request(`/admin/posts/${postId}`, {
-      method: 'DELETE',
-    });
+  async getVerificationRequests() {
+    return this.request('/admin/verification-requests');
   }
 
-  async approveVerification(userId: string, type: string) {
+  async approveVerification(userId: string, type: 'verified' | 'middleman') {
     return this.request(`/admin/verification/${userId}/approve`, {
       method: 'PATCH',
-      body: JSON.stringify({ type }),
+      body: JSON.stringify({ type })
     });
   }
 
-  async rejectVerification(userId: string) {
+  async rejectVerification(userId: string, reason?: string) {
     return this.request(`/admin/verification/${userId}/reject`, {
       method: 'PATCH',
+      body: JSON.stringify({ reason })
     });
   }
 
