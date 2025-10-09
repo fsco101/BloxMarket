@@ -336,8 +336,46 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
           setUserVote(null);
           setHasVoted(false);
         }
+      } else if (post.type === 'event') {
+        // Updated: Load event comments and votes like trades
+        try {
+          // Load event comments and votes
+          const [commentsResponse, votesResponse] = await Promise.allSettled([
+            apiService.getEventComments(post.id),
+            apiService.getEventVotes(post.id)
+          ]);
+
+          // Handle comments
+          if (commentsResponse.status === 'fulfilled') {
+            setComments(commentsResponse.value.comments || []);
+          } else {
+            console.error('Failed to load event comments:', commentsResponse.reason);
+            setComments([]);
+          }
+
+          // Handle votes
+          if (votesResponse.status === 'fulfilled') {
+            setUpvotes(votesResponse.value.upvotes || 0);
+            setDownvotes(votesResponse.value.downvotes || 0);
+            setUserVote(votesResponse.value.userVote || null);
+            setHasVoted(votesResponse.value.userVote !== null);
+          } else {
+            console.error('Failed to load event votes:', votesResponse.reason);
+            setUpvotes(post.upvotes || 0);
+            setDownvotes(post.downvotes || 0);
+            setUserVote(null);
+            setHasVoted(false);
+          }
+        } catch (apiError) {
+          console.error('Failed to load event data:', apiError);
+          setComments([]);
+          setUpvotes(post.upvotes || 0);
+          setDownvotes(post.downvotes || 0);
+          setUserVote(null);
+          setHasVoted(false);
+        }
       } else {
-        // For events, use default values
+        // For unknown post types, use default values
         setComments([]);
         setUpvotes(post.upvotes || 0);
         setDownvotes(post.downvotes || 0);
@@ -643,7 +681,7 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
                     variant="ghost"
                     size="lg"
                     onClick={handleUpvote}
-                    disabled={votingLoading || post.type === 'event'}
+                    disabled={votingLoading}
                     className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground'} hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950 text-base px-4 py-3 relative`}
                     title={userVote === 'up' ? 'Click to remove upvote' : userVote === 'down' ? 'Change to upvote' : 'Upvote this post'}
                   >
@@ -657,7 +695,7 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
                     variant="ghost"
                     size="lg"
                     onClick={handleDownvote}
-                    disabled={votingLoading || post.type === 'event'}
+                    disabled={votingLoading}
                     className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground'} hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 text-base px-4 py-3 relative`}
                     title={userVote === 'down' ? 'Click to remove downvote' : userVote === 'up' ? 'Change to downvote' : 'Downvote this post'}
                   >
