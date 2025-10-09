@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -29,7 +29,9 @@ import {
   Edit,
   Trash2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Filter,
+  Send
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -56,25 +58,14 @@ interface ForumPost {
   commentCount: number;
 }
 
-// Add new interfaces for modals
-interface ForumImageModalProps {
-  images: { filename: string; originalName?: string }[];
-  currentIndex: number;
-  isOpen: boolean;
-  onClose: () => void;
-  onNext: () => void;
-  onPrevious: () => void;
-}
-
-interface PostDetailsModalProps {
-  post: ForumPost | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  canEdit: boolean;
-  canDelete: boolean;
-  deleteLoading: boolean;
+interface ForumComment {
+  comment_id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  username: string;
+  credibility_score?: number;
 }
 
 // Enhanced Image Display Component - MOVED TO TOP
@@ -207,13 +198,146 @@ function ForumImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrev
   );
 }
 
-// Post Details Modal Component
+// Enhanced Post Details Modal Component with upvote/downvote and comments
 function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, canDelete, deleteLoading }: PostDetailsModalProps) {
+  const [comments, setComments] = useState<ForumComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [upvotes, setUpvotes] = useState(0);
+  const [downvotes, setDownvotes] = useState(0);
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [votingLoading, setVotingLoading] = useState(false);
+
+  // Load post comments and votes when modal opens
+  useEffect(() => {
+    if (isOpen && post) {
+      loadPostData();
+    }
+  }, [isOpen, post]);
+
+  const loadPostData = async () => {
+    if (!post) return;
+
+    try {
+      setLoadingComments(true);
+      console.log('Loading forum post data for:', post.post_id);
+      
+      // Load comments and vote data
+      const [commentsResponse, voteResponse] = await Promise.allSettled([
+        apiService.getForumComments(post.post_id),
+        apiService.getForumVotes(post.post_id)
+      ]);
+
+      // Handle comments
+      if (commentsResponse.status === 'fulfilled') {
+        setComments(commentsResponse.value.comments || []);
+      } else {
+        console.error('Failed to load comments:', commentsResponse.reason);
+        setComments([]);
+      }
+
+      // Handle votes
+      if (voteResponse.status === 'fulfilled') {
+        setUpvotes(voteResponse.value.upvotes || 0);
+        setDownvotes(voteResponse.value.downvotes || 0);
+        setUserVote(voteResponse.value.userVote || null);
+      } else {
+        console.error('Failed to load votes:', voteResponse.reason);
+        setUpvotes(post.upvotes || 0);
+        setDownvotes(post.downvotes || 0);
+        setUserVote(null);
+      }
+
+    } catch (error) {
+      console.error('Failed to load post data:', error);
+      toast.error('Failed to load post data');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleUpvote = async () => {
+    if (!post || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Upvoting forum post:', post.post_id);
+      
+      const response = await apiService.voteForumPost(post.post_id, 'up');
+      
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      
+      if (response.userVote === 'up') {
+        toast.success('Upvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to upvote!');
+      }
+    } catch (error) {
+      console.error('Failed to upvote:', error);
+      toast.error('Failed to update vote');
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleDownvote = async () => {
+    if (!post || votingLoading) return;
+
+    try {
+      setVotingLoading(true);
+      console.log('Downvoting forum post:', post.post_id);
+      
+      const response = await apiService.voteForumPost(post.post_id, 'down');
+      
+      setUpvotes(response.upvotes);
+      setDownvotes(response.downvotes);
+      setUserVote(response.userVote);
+      
+      if (response.userVote === 'down') {
+        toast.success('Downvoted!');
+      } else if (response.userVote === null) {
+        toast.success('Vote removed!');
+      } else {
+        toast.success('Changed to downvote!');
+      }
+    } catch (error) {
+      console.error('Failed to downvote:', error);
+      toast.error('Failed to update vote');
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !post || submittingComment) return;
+
+    try {
+      setSubmittingComment(true);
+      console.log('Adding comment to forum post:', post.post_id);
+      
+      const comment = await apiService.addForumComment(post.post_id, newComment);
+      
+      setComments(prev => [comment, ...prev]);
+      setNewComment('');
+      toast.success('Comment added!');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      toast.error('Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
   if (!post) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-blue-500" />
@@ -241,10 +365,37 @@ function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, ca
             <Badge variant="outline" className="text-xs capitalize">
               {post.category?.replace('_', ' ')}
             </Badge>
+            
+            {/* Vote Buttons */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleUpvote}
+                disabled={votingLoading}
+                className={`${userVote === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-950' : 'text-muted-foreground hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950'} transition-colors`}
+              >
+                <ArrowUp className={`w-5 h-5 mr-2 ${userVote === 'up' ? 'fill-current' : ''}`} />
+                {upvotes}
+                {votingLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownvote}
+                disabled={votingLoading}
+                className={`${userVote === 'down' ? 'text-red-600 bg-red-50 dark:bg-red-950' : 'text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950'} transition-colors`}
+              >
+                <ArrowDown className={`w-5 h-5 mr-2 ${userVote === 'down' ? 'fill-current' : ''}`} />
+                {downvotes}
+                {votingLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+              </Button>
+            </div>
           </div>
 
           {/* Post Content */}
-          <div className="prose prose-sm max-w-none dark:prose-invert">
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-semibold mb-2">Content</h3>
             <div className="whitespace-pre-wrap text-sm leading-relaxed">
               {post.content}
             </div>
@@ -254,94 +405,191 @@ function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, ca
           {post.images && post.images.length > 0 && (
             <div className="space-y-3">
               <h3 className="font-semibold">Images ({post.images.length})</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {post.images.map((image, index) => (
-                  <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow group">
-                    <div className="relative w-full h-full">
-                      <ImageDisplay
-                        src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
-                        alt={image.originalName || `Image ${index + 1}`}
-                        className="w-full h-full"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <Eye className="w-5 h-5 text-white" />
-                      </div>
-                    </div>
+                  <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow">
+                    <ImageDisplay
+                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/forum/${image.filename}`}
+                      alt={image.originalName || `Image ${index + 1}`}
+                      className="w-full h-full"
+                    />
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Post Stats */}
+          {/* Vote Stats */}
           <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-green-600">
                 <ArrowUp className="w-4 h-4" />
-                <span className="font-medium">{post.upvotes}</span>
+                <span className="font-medium">{upvotes}</span>
               </div>
               <span className="text-muted-foreground">Upvotes</span>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-red-600">
                 <ArrowDown className="w-4 h-4" />
-                <span className="font-medium">{post.downvotes}</span>
+                <span className="font-medium">{downvotes}</span>
               </div>
               <span className="text-muted-foreground">Downvotes</span>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-blue-600">
                 <MessageCircle className="w-4 h-4" />
-                <span className="font-medium">{post.commentCount || 0}</span>
+                <span className="font-medium">{comments.length}</span>
               </div>
               <span className="text-muted-foreground">Replies</span>
             </div>
           </div>
 
+          {/* Comments Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">
+                Comments ({comments.length})
+                {loadingComments && <Loader2 className="w-4 h-4 animate-spin inline ml-2" />}
+              </h3>
+            </div>
+
+            {/* Add Comment */}
+            <div className="flex gap-3 p-4 border rounded-lg bg-muted/20">
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                  Y
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 flex gap-2">
+                <Input
+                  placeholder="Add a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAddComment()}
+                  disabled={submittingComment}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || submittingComment}
+                >
+                  {submittingComment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Comments List */}
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {loadingComments ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
+                  <div key={comment.comment_id} className="flex gap-3 p-3 border rounded-lg">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
+                        {comment.username[0]?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">{comment.username}</span>
+                        {comment.credibility_score && (
+                          <Badge variant="secondary" className="text-xs">
+                            {comment.credibility_score}★
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(comment.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{comment.content}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No comments yet. Be the first to comment!</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Post ID */}
-          <div className="text-center text-xs text-muted-foreground">
-            Post ID: <span className="font-mono">{post.post_id.slice(-8)}</span>
+          <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
+            <div>
+              <span className="text-muted-foreground">Posted:</span>
+              <div className="font-medium">{new Date(post.created_at).toLocaleDateString()}</div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Post ID:</span>
+              <div className="font-medium font-mono">{post.post_id.slice(-8)}</div>
+            </div>
           </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-4 border-t">
-            <div className="flex items-center gap-1 flex-1">
-              <Button variant="ghost" size="sm" className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950">
-                <ArrowUp className="w-4 h-4 mr-1" />
-                Upvote ({post.upvotes})
-              </Button>
-              <Button variant="ghost" size="sm" className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950">
-                <ArrowDown className="w-4 h-4 mr-1" />
-                Downvote ({post.downvotes})
-              </Button>
-            </div>
-            
-            <Button variant="outline">
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Reply
-            </Button>
-            
-            {canEdit && (
-              <Button variant="outline" onClick={onEdit}>
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-            )}
-            
-            {canDelete && (
-              <Button 
-                variant="outline" 
-                onClick={onDelete}
-                disabled={deleteLoading}
-                className="text-red-600 hover:text-red-700"
-              >
-                {deleteLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4 mr-2" />
+            {canEdit ? (
+              <>
+                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Reply to Post
+                </Button>
+                <Button variant="outline" onClick={onEdit}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+                
+                {canDelete && (
+                  <Button 
+                    variant="outline" 
+                    onClick={onDelete}
+                    disabled={deleteLoading}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    {deleteLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-2" />
+                    )}
+                    {deleteLoading ? 'Deleting...' : 'Delete'}
+                  </Button>
                 )}
-                {deleteLoading ? 'Deleting...' : 'Delete'}
-              </Button>
+              </>
+            ) : (
+              <>
+                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Reply to Post
+                </Button>
+                {canDelete && (
+                  <Button 
+                    variant="outline" 
+                    onClick={onDelete}
+                    disabled={deleteLoading}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    {deleteLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-2" />
+                    )}
+                    {deleteLoading ? 'Deleting...' : 'Delete'}
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -353,17 +601,18 @@ function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, ca
 export function Forums() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [sortBy, setSortBy] = useState('activity');
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [newPost, setNewPost] = useState({
@@ -378,18 +627,18 @@ export function Forums() {
     category: 'general'
   });
   
-  // Image upload state - FIXED SYNTAX ERROR
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  // Image upload states (for creating/editing posts)
+  const [uploadSelectedImages, setUploadSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
-  const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
-  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]); // FIXED: Removed extra >
+  const [editUploadSelectedImages, setEditUploadSelectedImages] = useState<File[]>([]);
+  const [editImagePreviewUrls, setEditImagePreviewUrls] = useState<string[]>([]);
 
-  // Modal states
+  // Modal states (for viewing images and post details)
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [isPostDetailsOpen, setIsPostDetailsOpen] = useState(false);
   const [isForumImageModalOpen, setIsForumImageModalOpen] = useState(false);
-  const [selectedForumImages, setSelectedForumImages] = useState<{ filename: string; originalName?: string }[]>([]);
-  const [currentForumImageIndex, setCurrentForumImageIndex] = useState(0);
+  const [modalSelectedImages, setModalSelectedImages] = useState<{ filename: string; originalName?: string }[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Load current user
   useEffect(() => {
@@ -408,11 +657,7 @@ export function Forums() {
   }, []);
 
   // Load posts from API
-  useEffect(() => {
-    loadPosts();
-  }, [currentPage, filterCategory]);
-
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -432,7 +677,11 @@ export function Forums() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, filterCategory]);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
 
   // Modal functions
   const handlePostClick = (post: ForumPost) => {
@@ -441,17 +690,17 @@ export function Forums() {
   };
 
   const handleForumImageClick = (images: { filename: string; originalName?: string }[], index: number) => {
-    setSelectedForumImages(images);
-    setCurrentForumImageIndex(index);
+    setModalSelectedImages(images);
+    setCurrentImageIndex(index);
     setIsForumImageModalOpen(true);
   };
 
   const handleNextForumImage = () => {
-    setCurrentForumImageIndex((prev) => (prev + 1) % selectedForumImages.length);
+    setCurrentImageIndex((prev) => (prev + 1) % modalSelectedImages.length);
   };
 
   const handlePreviousForumImage = () => {
-    setCurrentForumImageIndex((prev) => (prev - 1 + selectedForumImages.length) % selectedForumImages.length);
+    setCurrentImageIndex((prev) => (prev - 1 + modalSelectedImages.length) % modalSelectedImages.length);
   };
 
   const handleEditFromModal = () => {
@@ -472,7 +721,7 @@ export function Forums() {
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
-    if (files.length + selectedImages.length > 5) {
+    if (files.length + uploadSelectedImages.length > 5) {
       setError('Maximum 5 images allowed');
       return;
     }
@@ -490,7 +739,7 @@ export function Forums() {
     });
 
     if (validFiles.length > 0) {
-      setSelectedImages(prev => [...prev, ...validFiles]);
+      setUploadSelectedImages(prev => [...prev, ...validFiles]);
       
       validFiles.forEach(file => {
         const reader = new FileReader();
@@ -503,14 +752,14 @@ export function Forums() {
   };
 
   const handleRemoveImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setUploadSelectedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleEditImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
-    if (files.length + editSelectedImages.length > 5) {
+    if (files.length + editUploadSelectedImages.length > 5) {
       setError('Maximum 5 images allowed');
       return;
     }
@@ -528,7 +777,7 @@ export function Forums() {
     });
 
     if (validFiles.length > 0) {
-      setEditSelectedImages(prev => [...prev, ...validFiles]);
+      setEditUploadSelectedImages(prev => [...prev, ...validFiles]);
       
       validFiles.forEach(file => {
         const reader = new FileReader();
@@ -541,7 +790,7 @@ export function Forums() {
   };
 
   const handleRemoveEditImage = (index: number) => {
-    setEditSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setEditUploadSelectedImages(prev => prev.filter((_, i) => i !== index));
     setEditImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -578,7 +827,7 @@ export function Forums() {
         title: newPost.title,
         content: newPost.content,
         category: newPost.category
-      }, selectedImages);
+      }, uploadSelectedImages);
       
       setIsCreateDialogOpen(false);
       setNewPost({
@@ -586,7 +835,7 @@ export function Forums() {
         content: '',
         category: 'general'
       });
-      setSelectedImages([]);
+      setUploadSelectedImages([]);
       setImagePreviewUrls([]);
       
       await loadPosts();
@@ -628,7 +877,7 @@ export function Forums() {
       content: post.content,
       category: post.category
     });
-    setEditSelectedImages([]);
+    setEditUploadSelectedImages([]);
     setEditImagePreviewUrls([]);
     setIsEditDialogOpen(true);
   };
@@ -655,7 +904,7 @@ export function Forums() {
         title: editPost.title,
         content: editPost.content,
         category: editPost.category
-      }, editSelectedImages);
+      }, editUploadSelectedImages);
       
       setIsEditDialogOpen(false);
       setEditingPost(null);
@@ -664,7 +913,7 @@ export function Forums() {
         content: '',
         category: 'general'
       });
-      setEditSelectedImages([]);
+      setEditUploadSelectedImages([]);
       setEditImagePreviewUrls([]);
       
       await loadPosts();
@@ -735,7 +984,6 @@ export function Forums() {
     }
   };
 
-  // Helper data and functions
   const categories = [
     { value: 'all', label: 'All Categories' },
     { value: 'trading_tips', label: 'Trading Tips' },
@@ -864,23 +1112,23 @@ export function Forums() {
                       onChange={handleImageSelect}
                       className="hidden"
                       id="forum-image-upload"
-                      disabled={selectedImages.length >= 5}
+                      disabled={uploadSelectedImages.length >= 5}
                     />
                     <label
                       htmlFor="forum-image-upload"
                       className={`cursor-pointer flex flex-col items-center gap-2 ${
-                        selectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                        uploadSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       <Upload className="w-8 h-8 text-gray-400" />
                       <span className="text-sm text-gray-600 dark:text-gray-300">
-                        {selectedImages.length >= 5 
+                        {uploadSelectedImages.length >= 5 
                           ? 'Maximum 5 images reached' 
                           : 'Click to upload images or drag and drop'
                         }
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        PNG, JPG, GIF up to 5MB each • {selectedImages.length}/5 selected
+                        PNG, JPG, GIF up to 5MB each • {uploadSelectedImages.length}/5 selected
                       </span>
                     </label>
                   </div>
@@ -1024,23 +1272,23 @@ export function Forums() {
                       onChange={handleEditImageSelect}
                       className="hidden"
                       id="edit-forum-image-upload"
-                      disabled={editSelectedImages.length >= 5}
+                      disabled={editUploadSelectedImages.length >= 5}
                     />
                     <label
                       htmlFor="edit-forum-image-upload"
                       className={`cursor-pointer flex flex-col items-center gap-2 ${
-                        editSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                        editUploadSelectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       <Upload className="w-8 h-8 text-gray-400" />
                       <span className="text-sm text-gray-600 dark:text-gray-300">
-                        {editSelectedImages.length >= 5 
+                        {editUploadSelectedImages.length >= 5 
                           ? 'Maximum 5 images reached' 
                           : 'Click to upload images or drag and drop'
                         }
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        PNG, JPG, GIF up to 5MB each • {editSelectedImages.length}/5 selected
+                        PNG, JPG, GIF up to 5MB each • {editUploadSelectedImages.length}/5 selected
                       </span>
                     </label>
                   </div>
@@ -1359,15 +1607,6 @@ export function Forums() {
       </div>
 
       {/* Modals */}
-      <ForumImageModal
-        images={selectedForumImages}
-        currentIndex={currentForumImageIndex}
-        isOpen={isForumImageModalOpen}
-        onClose={() => setIsForumImageModalOpen(false)}
-        onNext={handleNextForumImage}
-        onPrevious={handlePreviousForumImage}
-      />
-
       <PostDetailsModal
         post={selectedPost}
         isOpen={isPostDetailsOpen}
@@ -1377,6 +1616,15 @@ export function Forums() {
         canEdit={selectedPost ? canEditPost(selectedPost) : false}
         canDelete={selectedPost ? canDeletePost(selectedPost) : false}
         deleteLoading={selectedPost ? deleteLoading === selectedPost.post_id : false}
+      />
+
+      <ForumImageModal
+        images={modalSelectedImages}
+        currentIndex={currentImageIndex}
+        isOpen={isForumImageModalOpen}
+        onClose={() => setIsForumImageModalOpen(false)}
+        onNext={handleNextForumImage}
+        onPrevious={handlePreviousForumImage}
       />
     </div>
   );

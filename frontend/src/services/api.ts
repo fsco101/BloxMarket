@@ -305,6 +305,54 @@ class ApiService {
     }
   }
 
+  async deleteForumPost(postId: string) {
+    return this.request(`/forum/posts/${postId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getForumComments(postId: string) {
+    console.log('Fetching forum comments for:', postId);
+    
+    const response = await fetch(`${API_BASE_URL}/forum/posts/${postId}/comments`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get forum comments error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Forum comments data:', data);
+    return data;
+  }
+
+  async getForumVotes(postId: string) {
+    console.log('Fetching forum votes for:', postId);
+    
+    const response = await fetch(`${API_BASE_URL}/forum/posts/${postId}/votes`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get forum votes error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Forum votes data:', data);
+    return data;
+  }
+
   // Add forum comment - FIXED
   async addForumComment(postId: string, content: string) {
     console.log('Adding comment:', { postId, content }); // Debug log
