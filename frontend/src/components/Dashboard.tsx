@@ -104,6 +104,15 @@ interface DashboardPost {
   images?: Array<{ url: string; type: 'trade' | 'forum' }>;
   category?: string;
   status?: string;
+  // Add event-specific fields
+  prizes?: string[];
+  requirements?: string[];
+  eventType?: 'giveaway' | 'competition' | 'event';
+  eventStatus?: 'active' | 'ended' | 'upcoming' | 'ending-soon';
+  startDate?: string;
+  endDate?: string;
+  maxParticipants?: number;
+  participantCount?: number;
 }
 
 // Add interfaces for modal components
@@ -356,9 +365,10 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
         response = await apiService.voteForumPost(post.id, 'up');
       } else if (post.type === 'trade') {
         response = await apiService.voteTradePost(post.id, 'up');
+      } else if (post.type === 'event') {
+        response = await apiService.voteEvent(post.id, 'up');
       } else {
-        // For events, just show a message
-        toast.info('Voting not available for events');
+        toast.info('Voting not available for this post type');
         return;
       }
       
@@ -403,9 +413,10 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
         response = await apiService.voteForumPost(post.id, 'down');
       } else if (post.type === 'trade') {
         response = await apiService.voteTradePost(post.id, 'down');
+      } else if (post.type === 'event') {
+        response = await apiService.voteEvent(post.id, 'down');
       } else {
-        // For events, just show a message
-        toast.info('Voting not available for events');
+        toast.info('Voting not available for this post type');
         return;
       }
       
@@ -450,8 +461,10 @@ function PostModal({ post, isOpen, onClose, onUserClick }: PostModalProps) {
         newComment = await apiService.addForumComment(post.id, comment);
       } else if (post.type === 'trade') {
         newComment = await apiService.addTradeComment(post.id, comment);
+      } else if (post.type === 'event') {
+        newComment = await apiService.addEventComment(post.id, comment);
       } else {
-        // For events, create a mock comment for now
+        // Fallback for unknown post types
         newComment = {
           comment_id: Date.now().toString(),
           content: comment,
@@ -918,46 +931,139 @@ export function Dashboard() {
           });
         }
 
-        // Process events data (unchanged)
-        if (eventsData.status === 'fulfilled' && Array.isArray(eventsData.value)) {
-          const events: Event[] = eventsData.value;
-          activeEventCount = events.filter(event => 
+        // Process events data - Updated to match EventsGiveaways structure
+        if (eventsData.status === 'fulfilled') {
+          // Fix: Extract events array from response object, same as EventsGiveaways
+          const eventsArray = eventsData.value.events || eventsData.value || [];
+          activeEventCount = eventsArray.filter((event: any) => 
             event.status === 'active' || event.status === 'upcoming'
           ).length;
           
-          events.forEach(event => {
-            let timestamp = 'Recently';
+          // Process events with vote and comment counts like in EventsGiveaways
+          const eventsWithCounts = await Promise.all(eventsArray.map(async (event: any) => {
             try {
-              if (event.createdAt) {
-                timestamp = new Date(event.createdAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                });
-              }
-            } catch {
-              console.warn('Invalid date format for event:', event._id);
-            }
+              const [voteResponse, commentResponse] = await Promise.allSettled([
+                apiService.getEventVotes(event._id),
+                apiService.getEventComments(event._id)
+              ]);
 
-            allPosts.push({
-              id: event._id,
-              type: 'event',
-              title: event.title,
-              description: event.description || 'Check out this community event!',
-              user: {
-                username: event.creator?.username || 'Event Host',
-                rating: 5,
-                vouchCount: 999,
-                verified: event.creator?.verified || true,
-                moderator: true
-              },
-              timestamp,
-              comments: Math.floor(Math.random() * 100),
-              upvotes: Math.floor(Math.random() * 200),
-              downvotes: Math.floor(Math.random() * 50)
-            });
-          });
+              let upvotes = 0, downvotes = 0, comment_count = 0;
+
+              if (voteResponse.status === 'fulfilled') {
+                upvotes = voteResponse.value.upvotes || 0;
+                downvotes = voteResponse.value.downvotes || 0;
+              }
+
+              if (commentResponse.status === 'fulfilled') {
+                comment_count = commentResponse.value.comments?.length || 0;
+              }
+
+              let timestamp = 'Recently';
+              try {
+                if (event.createdAt) {
+                  timestamp = new Date(event.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                }
+              } catch {
+                console.warn('Invalid date format for event:', event._id);
+              }
+
+              // Process event images
+              let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
+              if (event.images && event.images.length > 0) {
+                images = event.images.map((img: any) => ({
+                  url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
+                  type: 'forum' as const // Use 'forum' type for events since there's no 'event' type in the union
+                }));
+              }
+
+              return {
+                id: event._id,
+                type: 'event',
+                title: event.title,
+                description: event.description || 'Check out this community event!',
+                user: {
+                  username: event.creator?.username || 'Event Host',
+                  rating: 5,
+                  vouchCount: 999,
+                  verified: event.creator?.verified || true,
+                  moderator: true
+                },
+                timestamp,
+                comments: comment_count,
+                upvotes: upvotes,
+                downvotes: downvotes,
+                images,
+                // Add event-specific data
+                prizes: event.prizes,
+                requirements: event.requirements,
+                eventType: event.type,
+                eventStatus: event.status,
+                startDate: event.startDate,
+                endDate: event.endDate,
+                maxParticipants: event.maxParticipants,
+                participantCount: event.participantCount
+              };
+            } catch (error) {
+              console.error('Failed to load counts for event:', event._id, error);
+              let timestamp = 'Recently';
+              try {
+                if (event.createdAt) {
+                  timestamp = new Date(event.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                }
+              } catch {
+                console.warn('Invalid date format for event:', event._id);
+              }
+
+              // Process event images even if counts fail
+              let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
+              if (event.images && event.images.length > 0) {
+                images = event.images.map((img: any) => ({
+                  url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
+                  type: 'forum' as const
+                }));
+              }
+
+              return {
+                id: event._id,
+                type: 'event',
+                title: event.title,
+                description: event.description || 'Check out this community event!',
+                user: {
+                  username: event.creator?.username || 'Event Host',
+                  rating: 5,
+                  vouchCount: 999,
+                  verified: event.creator?.verified || true,
+                  moderator: true
+                },
+                timestamp,
+                comments: 0,
+                upvotes: 0,
+                downvotes: 0,
+                images,
+                // Add event-specific data
+                prizes: event.prizes,
+                requirements: event.requirements,
+                eventType: event.type,
+                eventStatus: event.status,
+                startDate: event.startDate,
+                endDate: event.endDate,
+                maxParticipants: event.maxParticipants,
+                participantCount: event.participantCount
+              };
+            }
+          }));
+
+          allPosts.push(...eventsWithCounts);
         }
 
         // Sort posts by timestamp

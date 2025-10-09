@@ -80,7 +80,7 @@ const userSchema = new mongoose.Schema({
     createdAt: {
       type: Date,
       default: Date.now,
-      expires: 86400 // Token expires in 24 hours (in seconds)
+      expires: '366d' // Token expires in 366 days
     }
   }]
 }, {

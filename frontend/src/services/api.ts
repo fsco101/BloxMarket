@@ -364,34 +364,113 @@ class ApiService {
 
   async createEvent(eventData: {
     title: string;
-    description?: string;
-    startDate?: string;
-    endDate?: string;
-    type?: string;
+    description: string;
+    type: 'giveaway' | 'competition' | 'event';
+    startDate: string;
+    endDate: string;
     prizes?: string[];
     requirements?: string[];
     maxParticipants?: number;
-  }) {
-    return this.request('/events', {
-      method: 'POST',
-      body: JSON.stringify(eventData),
+  }, images?: File[]) {
+    console.log('Creating event:', { eventData, imagesCount: images?.length || 0 });
+    
+    const formData = new FormData();
+    
+    // Add event data
+    Object.entries(eventData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          // Handle arrays (prizes, requirements)
+          formData.append(key, value.join(', '));
+        } else {
+          formData.append(key, value.toString());
+        }
+      }
     });
+    
+    // Add images
+    if (images && images.length > 0) {
+      images.forEach(image => {
+        formData.append('images', image);
+      });
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/events`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+        // Don't set Content-Type - let browser set it for FormData
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Create event error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Create event response:', data);
+    return data;
   }
 
   async updateEvent(eventId: string, eventData: {
     title: string;
-    description?: string;
-    startDate?: string;
-    endDate?: string;
-    type?: string;
+    description: string;
+    type: 'giveaway' | 'competition' | 'event';
+    startDate: string;
+    endDate: string;
     prizes?: string[];
     requirements?: string[];
     maxParticipants?: number;
-  }) {
-    return this.request(`/events/${eventId}`, {
-      method: 'PUT',
-      body: JSON.stringify(eventData),
+  }, images?: File[], removeImages?: string[]) {
+    console.log('Updating event:', { eventId, eventData, imagesCount: images?.length || 0, removeImages });
+    
+    const formData = new FormData();
+    
+    // Add event data
+    Object.entries(eventData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          formData.append(key, value.join(', '));
+        } else {
+          formData.append(key, value.toString());
+        }
+      }
     });
+    
+    // Add images to remove
+    if (removeImages && removeImages.length > 0) {
+      removeImages.forEach(filename => {
+        formData.append('removeImages', filename);
+      });
+    }
+    
+    // Add new images
+    if (images && images.length > 0) {
+      images.forEach(image => {
+        formData.append('images', image);
+      });
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${this.token || localStorage.getItem('bloxmarket-token')}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Update event error:', response.status, errorData);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Update event response:', data);
+    return data;
   }
 
   async deleteEvent(eventId: string) {
