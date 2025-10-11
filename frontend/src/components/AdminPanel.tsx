@@ -84,6 +84,17 @@ export function AdminPanel() {
     if (isAdminOrModerator) {
       loadAdminStats();
     }
+
+    // Listen for section changes from sidebar
+    const handleSectionChange = (event: CustomEvent) => {
+      setActiveSection(event.detail);
+    };
+
+    window.addEventListener('admin-section-change', handleSectionChange as EventListener);
+
+    return () => {
+      window.removeEventListener('admin-section-change', handleSectionChange as EventListener);
+    };
   }, [isAdminOrModerator]);
 
   // If user is not admin or moderator, show access denied
@@ -107,18 +118,6 @@ export function AdminPanel() {
       </div>
     );
   }
-
-  const adminSections = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'users', label: 'User Management', icon: Users },
-    { id: 'middleman', label: 'Middleman Verification', icon: UserCheck },
-    { id: 'forum', label: 'Forum Posts', icon: MessageSquare },
-    { id: 'trades', label: 'Trading Posts', icon: ShoppingCart },
-    { id: 'wishlists', label: 'Wishlists', icon: Heart },
-    { id: 'events', label: 'Events', icon: Calendar },
-    { id: 'reports', label: 'User Reports', icon: Flag },
-    { id: 'flagged', label: 'Flagged Content', icon: AlertTriangle }
-  ];
 
   const renderContent = () => {
     switch (activeSection) {
@@ -181,6 +180,42 @@ export function AdminPanel() {
 
     return (
       <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <Shield className="w-8 h-8 text-red-500" />
+              Admin Dashboard
+            </h1>
+            <p className="text-muted-foreground">Platform management and statistics</p>
+          </div>
+          
+          {/* Section Navigation */}
+          <div className="flex gap-2">
+            <Button 
+              variant={activeSection === 'dashboard' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveSection('dashboard')}
+            >
+              Dashboard
+            </Button>
+            <Button 
+              variant={activeSection === 'users' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveSection('users')}
+            >
+              Users
+            </Button>
+            <Button 
+              variant={activeSection === 'reports' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setActiveSection('reports')}
+            >
+              Reports
+            </Button>
+          </div>
+        </div>
+
         {/* Quick Actions Alert */}
         {(stats.pendingReports > 0 || stats.flaggedPosts > 0 || stats.verificationRequests > 0) && (
           <Alert className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
@@ -394,64 +429,14 @@ export function AdminPanel() {
   };
 
   return (
-    <div className="flex h-full">
-      {/* Sidebar Navigation */}
-      <div className="w-64 border-r border-border bg-background/95 backdrop-blur">
-        <div className="p-4 border-b">
-          <h2 className="font-bold text-lg flex items-center gap-2">
-            <Shield className="w-6 h-6 text-red-500" />
-            Admin Panel
-          </h2>
-          <p className="text-sm text-muted-foreground">Platform Management</p>
-        </div>
-        
-        <nav className="p-2">
-          {adminSections.map((section) => {
-            const Icon = section.icon;
-            const stats = adminStats || { pendingReports: 0, flaggedPosts: 0, middlemanApplications: 0 };
-            
-            return (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  activeSection === section.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="text-sm font-medium">{section.label}</span>
-                {/* Show notification badges */}
-                {section.id === 'reports' && stats.pendingReports > 0 && (
-                  <Badge variant="destructive" className="ml-auto text-xs">
-                    {stats.pendingReports}
-                  </Badge>
-                )}
-                {section.id === 'flagged' && stats.flaggedPosts > 0 && (
-                  <Badge variant="destructive" className="ml-auto text-xs">
-                    {stats.flaggedPosts}
-                  </Badge>
-                )}
-                {section.id === 'middleman' && stats.middlemanApplications > 0 && (
-                  <Badge variant="secondary" className="ml-auto text-xs">
-                    {stats.middlemanApplications}
-                  </Badge>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto">
-          <div className="p-6">
-            {renderContent()}
-          </div>
-        </div>
-      </div>
+    <div className="flex-1 p-6">
+      {renderContent()}
     </div>
   );
 }
+
+// Export the section setter function to be used by Sidebar
+export const useAdminPanel = () => {
+  const [activeSection, setActiveSection] = useState('dashboard');
+  return { activeSection, setActiveSection };
+};

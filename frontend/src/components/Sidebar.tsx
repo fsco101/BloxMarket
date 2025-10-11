@@ -3,6 +3,13 @@ import { useApp, useAuth, useTheme } from '../App';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import { 
   Home, 
   ArrowLeftRight, 
@@ -14,7 +21,14 @@ import {
   Settings,
   LogOut,
   Moon,
-  Sun
+  Sun,
+  ChevronDown,
+  Users,
+  Flag,
+  AlertTriangle,
+  UserCheck,
+  ShoppingCart,
+  BarChart3
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -25,6 +39,18 @@ export function Sidebar() {
   // Check if user is admin or moderator
   const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
 
+  const adminMenuItems = [
+    { id: 'admin', label: 'Dashboard', icon: BarChart3 },
+    { id: 'admin-users', label: 'User Management', icon: Users },
+    { id: 'admin-middleman', label: 'Middleman Verification', icon: UserCheck },
+    { id: 'admin-forum', label: 'Forum Management', icon: MessageSquare },
+    { id: 'admin-trades', label: 'Trading Posts', icon: ShoppingCart },
+    { id: 'admin-wishlists', label: 'Wishlists', icon: Heart },
+    { id: 'admin-events', label: 'Events', icon: Calendar },
+    { id: 'admin-reports', label: 'User Reports', icon: Flag },
+    { id: 'admin-flagged', label: 'Flagged Content', icon: AlertTriangle }
+  ];
+
   const menuItems = [
     { id: 'dashboard', label: 'Home', icon: Home },
     { id: 'trading-hub', label: 'Trading Hub', icon: ArrowLeftRight },
@@ -32,9 +58,22 @@ export function Sidebar() {
     { id: 'middleman', label: 'Middleman Directory', icon: Shield },
     { id: 'forums', label: 'Forums', icon: MessageSquare },
     { id: 'events', label: 'Events & Giveaways', icon: Calendar },
-    { id: 'profile', label: 'Profile', icon: User },
-    ...(isAdminOrModerator ? [{ id: 'admin', label: 'Admin Panel', icon: Settings }] : [])
+    { id: 'profile', label: 'Profile', icon: User }
   ];
+
+  const handleAdminMenuClick = (itemId: string) => {
+    // Set current page to admin for all admin-related pages
+    setCurrentPage('admin');
+    
+    // You can add additional logic here to communicate with AdminPanel
+    // about which section should be active
+    if (itemId !== 'admin') {
+      // Extract the section name (remove 'admin-' prefix)
+      const section = itemId.replace('admin-', '');
+      // You could dispatch a custom event or use a global state manager
+      window.dispatchEvent(new CustomEvent('admin-section-change', { detail: section }));
+    }
+  };
 
   return (
     <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0 flex-shrink-0">
@@ -97,6 +136,38 @@ export function Sidebar() {
               {label}
             </Button>
           ))}
+
+          {/* Admin Dropdown Menu */}
+          {isAdminOrModerator && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={currentPage === 'admin' ? "secondary" : "ghost"}
+                  className={`w-full justify-start h-10 ${
+                    currentPage === 'admin'
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
+                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  }`}
+                >
+                  <Settings className="w-4 h-4 mr-3" />
+                  Admin Panel
+                  <ChevronDown className="w-4 h-4 ml-auto" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {adminMenuItems.map(({ id, label, icon: Icon }) => (
+                  <DropdownMenuItem
+                    key={id}
+                    onClick={() => handleAdminMenuClick(id)}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </nav>
 

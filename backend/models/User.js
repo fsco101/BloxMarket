@@ -79,8 +79,7 @@ const userSchema = new mongoose.Schema({
     },
     createdAt: {
       type: Date,
-      default: Date.now,
-      expires: '366d' // Token expires in 366 days
+      default: Date.now
     }
   }]
 }, {
