@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader } from './ui/card';
-import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardFooter } from './ui/card';import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Input } from './ui/input';
@@ -35,6 +34,39 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { useAuth } from '../App';
+import { formatDistanceToNow } from 'date-fns';
+
+const toISO = (v: any): string => {
+  if (!v) return new Date().toISOString();
+  const d = new Date(v);
+  return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+};
+
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown date';
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch {
+    return 'Unknown date';
+  }
+};
+
+const formatFullDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown date';
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return 'Unknown date';
+  }
+};
 
 interface Trade {
   trade_id: string;
@@ -43,12 +75,12 @@ interface Trade {
   description?: string;
   status: string;
   created_at: string;
+  updated_at?: string;
   username: string;
   roblox_username: string;
   credibility_score: number;
   images?: { image_url: string; uploaded_at: string }[];
   user_id?: string;
-  // Updated fields for upvote/downvote system
   upvotes?: number;
   downvotes?: number;
   comments?: TradeComment[];
@@ -410,10 +442,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Trade Details</span>
-            <Badge className={`${trade.status === 'open' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 
-              trade.status === 'in_progress' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 
-              trade.status === 'completed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 
-              'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+            <Badge variant={trade.status === 'open' ? 'default' : 'secondary'}>
               {trade.status}
             </Badge>
           </DialogTitle>
@@ -596,12 +625,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {new Date(comment.created_at).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {formatDate(comment.created_at)}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">{comment.content}</p>
@@ -621,7 +645,8 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
             <div>
               <span className="text-muted-foreground">Posted:</span>
-              <div className="font-medium">{new Date(trade.created_at).toLocaleDateString()}</div>
+              <div className="font-medium">{formatFullDate(trade.created_at)}</div>
+              <div className="text-xs text-muted-foreground">{formatDate(trade.created_at)}</div>
             </div>
             <div>
               <span className="text-muted-foreground">Trade ID:</span>
@@ -736,39 +761,40 @@ export function TradingHub() {
     try {
       setLoading(true);
       setError('');
-      const params: Record<string, string | number> = {
-        page: currentPage,
-        limit: 10
-      };
-      
-      if (filterCategory !== 'all') {
-        params.status = filterCategory;
-      }
-      
+      const params: Record<string, string | number> = { page: currentPage, limit: 10 };
+      if (filterCategory !== 'all') params.status = filterCategory;
+
       const response = await apiService.getTrades(params);
-      
-      // Map backend response to frontend interface
+
       const mappedTrades = response.trades.map((trade: any) => ({
-        trade_id: trade.trade_id,
+        trade_id: trade.trade_id || trade._id,
         item_offered: trade.item_offered,
         item_requested: trade.item_requested,
         description: trade.description,
         status: trade.status,
-        created_at: trade.created_at,
-        username: trade.user.username,
-        roblox_username: trade.user.roblox_username,
-        credibility_score: trade.user.credibility_score,
-        user_id: trade.user._id,
-        images: trade.images || [],
+        created_at: toISO(trade.created_at || trade.createdAt),
+        updated_at: toISO(trade.updated_at || trade.updatedAt),
+        username: trade.user?.username || trade.username,
+        roblox_username: trade.user?.roblox_username || trade.roblox_username,
+        credibility_score: trade.user?.credibility_score ?? trade.credibility_score ?? 0,
+        user_id: trade.user?._id || trade.user_id,
+        images: Array.isArray(trade.images)
+          ? trade.images.map((img: any) =>
+              typeof img === 'string'
+                ? { image_url: img, uploaded_at: new Date().toISOString() }
+                : {
+                    image_url: img.image_url || img.filename || String(img).split('/').pop(),
+                    uploaded_at: toISO(img.uploaded_at)
+                  }
+            )
+          : [],
         upvotes: trade.upvotes || 0,
         downvotes: trade.downvotes || 0,
         comment_count: trade.comment_count || 0
       }));
-      
+
       setTrades(mappedTrades);
-      if (response.pagination) {
-        setTotalPages(response.pagination.totalPages);
-      }
+      if (response.pagination) setTotalPages(response.pagination.totalPages);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load trades');
     } finally {
@@ -1571,8 +1597,8 @@ export function TradingHub() {
           {!loading && !error && (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredTrades.map((trade) => (
-                <Card key={trade.trade_id} className="hover:shadow-lg transition-all duration-200 cursor-pointer group">
-                  <CardHeader className="pb-3">
+                <Card key={trade.trade_id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10">
@@ -1599,7 +1625,7 @@ export function TradingHub() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-4" onClick={() => handleTradeClick(trade)}>
+                  <CardContent>
                     {/* Trade Images */}
                     {trade.images && trade.images.length > 0 && (
                       <div className="relative" onClick={(e) => {
@@ -1662,11 +1688,12 @@ export function TradingHub() {
                     {/* Timestamp */}
                     <div className="pt-2 border-t border-border">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Posted: {new Date(trade.created_at).toLocaleDateString()}</span>
+                        <span>{formatDate(trade.created_at)}</span>
                         <span>ID: {trade.trade_id.slice(-6)}</span>
                       </div>
                     </div>
-
+                  </CardContent>
+                  <CardFooter className="flex-col gap-2">
                     {/* Actions */}
                     <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
                       {canEditTrade(trade) ? (
@@ -1805,7 +1832,7 @@ export function TradingHub() {
                     </div>
 
                     {/* Trade Stats */}
-                    <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground w-full">
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1 text-green-600">
                           <ArrowUp className="w-3 h-3" />
@@ -1825,7 +1852,7 @@ export function TradingHub() {
                         <span>View Details</span>
                       </div>
                     </div>
-                  </CardContent>
+                  </CardFooter>
                 </Card>
               ))}
             </div>
