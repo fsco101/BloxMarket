@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogBody } from './ui/dialog';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import { 
@@ -438,7 +438,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Trade Details</span>
@@ -448,7 +448,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
+        <DialogBody>
           {/* Trader Info */}
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <Avatar className="w-12 h-12">
@@ -653,61 +653,60 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
               <div className="font-medium font-mono">{trade.trade_id.slice(-8)}</div>
             </div>
           </div>
+        </DialogBody>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t">
-            {canEdit ? (
-              <>
-                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Contact Trader
+        <DialogFooter>
+          {canEdit ? (
+            <>
+              <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Contact Trader
+              </Button>
+              <Button variant="outline" onClick={onEdit}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+              
+              {canDelete && (
+                <Button 
+                  variant="outline" 
+                  onClick={onDelete}
+                  disabled={deleteLoading}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  {deleteLoading ? 'Deleting...' : 'Delete'}
                 </Button>
-                <Button variant="outline" onClick={onEdit}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit
+              )}
+            </>
+          ) : (
+            <>
+              <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Contact Trader
+              </Button>
+              {canDelete && (
+                <Button 
+                  variant="outline" 
+                  onClick={onDelete}
+                  disabled={deleteLoading}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  {deleteLoading ? 'Deleting...' : 'Delete'}
                 </Button>
-                
-                {canDelete && (
-                  <Button 
-                    variant="outline" 
-                    onClick={onDelete}
-                    disabled={deleteLoading}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    {deleteLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-2" />
-                    )}
-                    {deleteLoading ? 'Deleting...' : 'Delete'}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Contact Trader
-                </Button>
-                {canDelete && (
-                  <Button 
-                    variant="outline" 
-                    onClick={onDelete}
-                    disabled={deleteLoading}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    {deleteLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-2" />
-                    )}
-                    {deleteLoading ? 'Deleting...' : 'Delete'}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+              )}
+            </>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1597,7 +1596,11 @@ export function TradingHub() {
           {!loading && !error && (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredTrades.map((trade) => (
-                <Card key={trade.trade_id} className="hover:shadow-lg transition-shadow">
+                <Card 
+                  key={trade.trade_id} 
+                  className="hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => handleTradeClick(trade)}
+                >
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -1694,8 +1697,30 @@ export function TradingHub() {
                     </div>
                   </CardContent>
                   <CardFooter className="flex-col gap-2">
-                    {/* Actions */}
-                    <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                    {/* Trade Stats */}
+                    <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1 text-green-600">
+                          <ArrowUp className="w-3 h-3" />
+                          <span>{trade.upvotes || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-red-600">
+                          <ArrowDown className="w-3 h-3" />
+                          <span>{trade.downvotes || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" />
+                          <span>{trade.comment_count || 0}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Eye className="w-3 h-3" />
+                        <span>View Details</span>
+                      </div>
+                    </div>
+
+                    {/* Actions - Keep stopPropagation on buttons */}
+                    <div className="flex gap-2 w-full" onClick={(e) => e.stopPropagation()}>
                       {canEditTrade(trade) ? (
                         <>
                           {/* Show different buttons based on trade status */}
@@ -1802,15 +1827,6 @@ export function TradingHub() {
                             <MessageSquare className="w-3 h-3 mr-1" />
                             Contact
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex-1"
-                            onClick={() => handleTradeClick(trade)}
-                          >
-                            <Eye className="w-3 h-3 mr-1" />
-                            View Details
-                          </Button>
                           {canDeleteTrade(trade) && (
                             <Button 
                               variant="outline" 
@@ -1829,28 +1845,6 @@ export function TradingHub() {
                           )}
                         </>
                       )}
-                    </div>
-
-                    {/* Trade Stats */}
-                    <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground w-full">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1 text-green-600">
-                          <ArrowUp className="w-3 h-3" />
-                          <span>{trade.upvotes || 0}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-red-600">
-                          <ArrowDown className="w-3 h-3" />
-                          <span>{trade.downvotes || 0}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3" />
-                          <span>{trade.comment_count || 0}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        <span>View Details</span>
-                      </div>
                     </div>
                   </CardFooter>
                 </Card>
