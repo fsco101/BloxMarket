@@ -38,6 +38,10 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'verified', 'middleman', 'admin', 'moderator', 'banned'],
     default: 'user'
   },
+  is_active: {
+    type: Boolean,
+    default: true
+  },
   bio: {
     type: String,
     trim: true,
@@ -63,10 +67,19 @@ const userSchema = new mongoose.Schema({
   },
   ban_reason: {
     type: String,
-    trim: true
+    trim: true,
+    maxlength: 500
   },
   banned_at: {
     type: Date
+  },
+  deactivated_at: {
+    type: Date
+  },
+  deactivation_reason: {
+    type: String,
+    trim: true,
+    maxlength: 500
   },
   lastLogin: {
     type: Date,

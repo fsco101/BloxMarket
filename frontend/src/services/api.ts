@@ -2,57 +2,103 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 class ApiService {
   private token: string | null;
+  private verifyingOnce = false;
 
   constructor() {
+    // Always try to get the most current token from localStorage
     this.token = localStorage.getItem('bloxmarket-token');
-    // Add debug logging
     console.log('ApiService initialized with token:', this.token ? 'present' : 'missing');
+  }
+
+  private async verifyTokenSilently(currentToken: string) {
+    if (this.verifyingOnce) return false;
+    this.verifyingOnce = true;
+    try {
+      const resp = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${currentToken}` }
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    } finally {
+      this.verifyingOnce = false;
+    }
   }
 
   async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    
+    const currentToken = localStorage.getItem('bloxmarket-token') || this.token || null;
+
     const config: RequestInit = {
-      headers: {
-        // Only set Content-Type for non-FormData requests
-        ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
-        ...options.headers,
-      },
+      // Important: spread options first so our merged headers don't get overwritten by options.headers
       ...options,
+      headers: {
+        ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
+        ...(currentToken && { Authorization: `Bearer ${currentToken}` }),
+        ...(options.headers || {}),
+      },
     };
 
     try {
       const response = await fetch(url, config);
-      
-      // Check if the response is JSON
-      const contentType = response.headers.get('content-type');
-      let data;
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        // Handle non-JSON responses (like error messages)
-        const text = await response.text();
-        data = { error: text };
-      }
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : { error: await response.text() };
 
       if (!response.ok) {
-        throw new Error(data.error || data || 'API request failed');
+        if (response.status === 401) {
+          const errMsg = typeof data?.error === 'string' ? data.error : '';
+          const isAuthError =
+            errMsg === 'Access denied. No token provided.' ||
+            errMsg === 'Token expired' ||
+            errMsg === 'Invalid token' ||
+            errMsg === 'Token verification failed' ||
+            errMsg === 'User not found';
+
+          if (isAuthError) {
+            // Verify once to avoid false positives during navigation
+            const ok = currentToken ? await this.verifyTokenSilently(currentToken) : false;
+            if (!ok) {
+              this.clearToken();
+              window.dispatchEvent(new CustomEvent('auth-expired'));
+              throw new Error('Session expired. Please log in again.');
+            }
+            // Token is valid; treat as access error for this endpoint
+            throw new Error(data?.error || 'Access denied');
+          }
+        }
+        if (response.status === 403) {
+          const errMsg = typeof data?.error === 'string' ? data.error : '';
+          if (errMsg === 'Account is banned' || errMsg === 'Account is deactivated') {
+            this.clearToken();
+            window.dispatchEvent(new CustomEvent('auth-expired'));
+          }
+          // Do NOT logout on 'Admin access required'
+        }
+        throw new Error(data?.error || 'API request failed');
       }
 
       return data;
     } catch (error) {
       console.error('API request error:', error);
-      // If it's a parsing error, provide a more helpful message
-      if (error instanceof SyntaxError && error.message.includes('JSON')) {
-        throw new Error('Server returned invalid response. Please check if the backend is running.');
-      }
       throw error;
     }
   }
 
   // Auth methods
+  async login(credentials: { username: string; password: string }) {
+    const data = await this.request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+    if (data?.token) {
+      this.setToken(data.token);
+      // Optional: persist user for faster UX on reload
+      localStorage.setItem('bloxmarket-user', JSON.stringify(data.user));
+    }
+    return data;
+  }
+
   async register(userData: {
     username: string;
     email: string;
@@ -63,25 +109,16 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(userData),
     });
-    
-    if (data.token) {
+    if (data?.token) {
       this.setToken(data.token);
+      localStorage.setItem('bloxmarket-user', JSON.stringify(data.user));
     }
-    
     return data;
   }
 
-  async login(credentials: { username: string; password: string }) {
-    const data = await this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
-    });
-    
-    if (data.token) {
-      this.setToken(data.token);
-    }
-    
-    return data;
+  // Keep using the protected route that hits backend middleware auth.js
+  async getCurrentUser() {
+    return this.request('/auth/me', { method: 'GET' });
   }
 
   async logout() {
@@ -120,26 +157,39 @@ class ApiService {
     itemRequested?: string;
     description?: string;
   }, images?: File[]) {
+    console.log('Creating trade:', tradeData);
+    
     const formData = new FormData();
     formData.append('itemOffered', tradeData.itemOffered);
-    if (tradeData.itemRequested) formData.append('itemRequested', tradeData.itemRequested);
-    if (tradeData.description) formData.append('description', tradeData.description);
+    if (tradeData.itemRequested) {
+      formData.append('itemRequested', tradeData.itemRequested);
+    }
+    if (tradeData.description) {
+      formData.append('description', tradeData.description);
+    }
     
-    // Add images to FormData
+    // Add images if provided
     if (images && images.length > 0) {
-      images.forEach((image) => {
+      images.forEach((image, index) => {
         formData.append('images', image);
       });
     }
-
-    return this.request('/trades', {
+    
+    const token = localStorage.getItem('bloxmarket-token');
+    const response = await fetch(`${API_BASE_URL}/trades`, {
       method: 'POST',
-      body: formData,
       headers: {
-        // Remove Content-Type header to let browser set it with boundary for FormData
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+        'Authorization': `Bearer ${token}`
       },
+      body: formData
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to create trade');
+    }
+    
+    return await response.json();
   }
 
   async uploadTradeImages(images: File[]) {
@@ -169,43 +219,112 @@ class ApiService {
     itemRequested?: string;
     description?: string;
   }, images?: File[]) {
+    console.log('Updating trade:', tradeId, tradeData);
+    
     const formData = new FormData();
     formData.append('itemOffered', tradeData.itemOffered);
-    if (tradeData.itemRequested) formData.append('itemRequested', tradeData.itemRequested);
-    if (tradeData.description) formData.append('description', tradeData.description);
+    if (tradeData.itemRequested) {
+      formData.append('itemRequested', tradeData.itemRequested);
+    }
+    if (tradeData.description) {
+      formData.append('description', tradeData.description);
+    }
     
-    // Add images to FormData
+    // Add new images if provided
     if (images && images.length > 0) {
-      images.forEach((image) => {
+      images.forEach((image, index) => {
         formData.append('images', image);
       });
     }
-
-    return this.request(`/trades/${tradeId}`, {
+    
+    const token = localStorage.getItem('bloxmarket-token');
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}`, {
       method: 'PUT',
-      body: formData,
       headers: {
-        // Remove Content-Type header to let browser set it with boundary for FormData
-        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+        'Authorization': `Bearer ${token}`
       },
+      body: formData
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to update trade');
+    }
+    
+    return await response.json();
   }
 
   async updateTradeStatus(tradeId: string, status: string) {
-    return this.request(`/trades/${tradeId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
+    console.log('Updating trade status:', tradeId, status);
+    
+    const token = localStorage.getItem('bloxmarket-token');
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status })
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to update trade status');
+    }
+    
+    return await response.json();
   }
 
   async deleteTrade(tradeId: string) {
-    return this.request(`/trades/${tradeId}`, {
+    console.log('Deleting trade:', tradeId);
+    
+    const token = localStorage.getItem('bloxmarket-token');
+    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to delete trade');
+    }
+    
+    return await response.json();
   }
 
   async getUserTrades(userId: string) {
-    return this.request(`/trades/user/${userId}`);
+    console.log('Fetching trades for user:', userId);
+    
+    const token = localStorage.getItem('bloxmarket-token');
+    const response = await fetch(`${API_BASE_URL}/trades/user/${userId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Get user trades error:', response.status, errorData);
+      throw new Error(errorData.error || `Failed to fetch user trades: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('User trades data:', data);
+    
+    // Handle different response formats
+    if (data.trades && Array.isArray(data.trades)) {
+      return data.trades;
+    } else if (Array.isArray(data)) {
+      return data;
+    } else if (data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+    
+    return [];
   }
 
   // Forum methods
@@ -541,7 +660,7 @@ class ApiService {
 
   // User profile methods
   async getCurrentUser() {
-    return this.request('/users/me');
+    return this.request('/auth/me', { method: 'GET' });
   }
 
   async getUserProfile(userId: string) {
@@ -629,6 +748,13 @@ class ApiService {
     });
   }
 
+  async updateUserStatus(userId: string, action: 'activate' | 'deactivate', reason?: string) {
+    return this.request(`/admin/users/${userId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action, reason })
+    });
+  }
+
   async getVerificationRequests() {
     return this.request('/admin/verification-requests');
   }
@@ -651,15 +777,17 @@ class ApiService {
   setToken(token: string) {
     this.token = token;
     localStorage.setItem('bloxmarket-token', token);
+    console.log('Token set in ApiService');
   }
 
   clearToken() {
     this.token = null;
     localStorage.removeItem('bloxmarket-token');
+    console.log('Token cleared from ApiService');
   }
 
   isAuthenticated(): boolean {
-    return !!this.token;
+    return !!(this.token || localStorage.getItem('bloxmarket-token'));
   }
 
   // Get trade comments
@@ -845,7 +973,99 @@ class ApiService {
   }
 
   async getUserTradeHistory(userId: string) {
-    return this.request(`/users/${userId}/trades`);
+    console.log('Fetching trade history for user:', userId);
+    
+    try {
+      const token = localStorage.getItem('bloxmarket-token');
+      const response = await fetch(`${API_BASE_URL}/trades/user/${userId}/history`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        // Handle 404 specifically for missing routes
+        if (response.status === 404) {
+          console.warn('Trade history endpoint not implemented yet, returning empty array');
+          return [];
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Get user trade history error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to fetch user trade history: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('User trade history data:', data);
+      
+      // Handle different response formats
+      if (data.trades && Array.isArray(data.trades)) {
+        return data.trades;
+      } else if (Array.isArray(data)) {
+        return data;
+      } else if (data.data && Array.isArray(data.data)) {
+        return data.data;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching user trade history:', error);
+      // Return empty array instead of throwing for missing endpoints
+      if (error.message.includes('Route not found') || error.message.includes('404')) {
+        console.warn('Trade history endpoint not available, returning empty data');
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getUserForumPosts(userId: string) {
+    console.log('Fetching forum posts for user:', userId);
+    
+    try {
+      const token = localStorage.getItem('bloxmarket-token');
+      const response = await fetch(`${API_BASE_URL}/forum/user/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        // Handle 404 specifically for missing routes
+        if (response.status === 404) {
+          console.warn('User forum posts endpoint not implemented yet, returning empty array');
+          return [];
+        }
+        
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Get user forum posts error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to fetch user forum posts: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('User forum posts data:', data);
+      
+      // Handle different response formats
+      if (data.posts && Array.isArray(data.posts)) {
+        return data.posts;
+      } else if (Array.isArray(data)) {
+        return data;
+      } else if (data.data && Array.isArray(data.data)) {
+        return data.data;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching user forum posts:', error);
+      // Return empty array instead of throwing for missing endpoints
+      if (error.message.includes('Route not found') || error.message.includes('404')) {
+        console.warn('User forum posts endpoint not available, returning empty data');
+        return [];
+      }
+      throw error;
+    }
   }
 }
 

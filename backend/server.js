@@ -1,8 +1,10 @@
+// Load env FIRST (move to the very top, before any other imports)
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
@@ -20,8 +22,6 @@ import forumRoutes from './routes/forum.js';
 import eventRoutes from './routes/events.js';
 import adminRoutes from './routes/admin.js';
 import uploadsRoutes from './routes/uploads.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

@@ -123,7 +123,7 @@ import {
 } from 'lucide-react';
 
 export function UserProfile() {
-  const { user } = useAuth();
+  const { user, isLoggedIn, isLoading: authLoading } = useAuth();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
@@ -166,7 +166,7 @@ export function UserProfile() {
       const trades = await apiService.getUserTradeHistory(userId);
       console.log('Trade history loaded:', trades?.length || 0, 'trades');
       
-      if (trades && Array.isArray(trades)) {
+      if (trades && Array.isArray(trades) && trades.length > 0) {
         // Process trades to add user-specific context
         const processedTrades: Trade[] = trades.map(trade => ({
           ...trade,
@@ -207,10 +207,43 @@ export function UserProfile() {
           totalTrades: historyData.totalTrades,
           successRate: historyData.successRate
         } : null);
+      } else {
+        // Set empty trade history if no trades or endpoint not available
+        console.log('No trade history available or endpoint not implemented');
+        setTradeHistory({
+          trades: [],
+          totalTrades: 0,
+          completedTrades: 0,
+          activeTrades: 0,
+          pendingTrades: 0,
+          cancelledTrades: 0,
+          disputedTrades: 0,
+          successRate: 0,
+          totalValue: 0
+        });
       }
     } catch (err: unknown) {
       console.error('Error loading trade history:', err);
-      // Don't show error for trade history, it's not critical for profile display
+      
+      // Check if it's a missing endpoint error
+      if (err instanceof Error && (err.message.includes('Route not found') || err.message.includes('404'))) {
+        console.warn('Trade history endpoint not available, setting empty data');
+        setTradeHistory({
+          trades: [],
+          totalTrades: 0,
+          completedTrades: 0,
+          activeTrades: 0,
+          pendingTrades: 0,
+          cancelledTrades: 0,
+          disputedTrades: 0,
+          successRate: 0,
+          totalValue: 0
+        });
+        // Don't show error for missing endpoints
+        return;
+      }
+      
+      // For other errors, set empty data but don't show error to user
       setTradeHistory({
         trades: [],
         totalTrades: 0,
@@ -447,7 +480,8 @@ export function UserProfile() {
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+      if (file.size > 2 * 1024 * 1024) // 2MB limit
+        {
         toast.error('Avatar file too large (max 2MB)');
         return;
       }

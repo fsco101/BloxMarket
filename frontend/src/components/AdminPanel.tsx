@@ -54,48 +54,51 @@ interface AdminStats {
 }
 
 export function AdminPanel() {
-  const { user } = useAuth();
+  const { user, logout, isLoading: authLoading, isLoggedIn } = useAuth();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Check if user is admin or moderator
   const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
 
-  // Load admin statistics
   const loadAdminStats = async () => {
     try {
       setLoading(true);
       setError('');
-      
+
+      if (authLoading || !isLoggedIn || !apiService.isAuthenticated()) {
+        setError('Authentication not ready.');
+        return;
+      }
+
       const stats = await apiService.getAdminStats();
       setAdminStats(stats);
     } catch (err: unknown) {
       console.error('Error loading admin stats:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load admin statistics');
-      toast.error('Failed to load admin statistics');
+      if (err instanceof Error) {
+        // Do not call logout(); apiService will dispatch 'auth-expired' if needed
+        if (err.message.includes('Session expired') || err.message.includes('Invalid token')) {
+          setError('Your session has expired. Please log in again.');
+          return;
+        }
+        setError(err.message);
+      } else {
+        setError('Failed to load admin statistics');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isAdminOrModerator) {
+    if (isAdminOrModerator && !authLoading && apiService.isAuthenticated()) {
       loadAdminStats();
     }
-
-    // Listen for section changes from sidebar
-    const handleSectionChange = (event: CustomEvent) => {
-      setActiveSection(event.detail);
-    };
-
+    const handleSectionChange = (event: CustomEvent) => setActiveSection(event.detail);
     window.addEventListener('admin-section-change', handleSectionChange as EventListener);
-
-    return () => {
-      window.removeEventListener('admin-section-change', handleSectionChange as EventListener);
-    };
-  }, [isAdminOrModerator]);
+    return () => window.removeEventListener('admin-section-change', handleSectionChange as EventListener);
+  }, [isAdminOrModerator, authLoading]);
 
   // If user is not admin or moderator, show access denied
   if (!isAdminOrModerator) {

@@ -11,6 +11,8 @@ import { UserProfile } from './components/UserProfile';
 import { AdminPanel } from './components/AdminPanel';
 import { EventsGiveaways } from './components/EventsGiveaways';
 import { apiService } from './services/api';
+import { MyForumPosts } from './components/user/MyForumPosts';
+import { MyTradePosts } from './components/user/MyTradePosts';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -121,35 +123,55 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for saved theme preference
-    const savedTheme = localStorage.getItem('bloxmarket-theme');
-    if (savedTheme === 'dark') {
-      setIsDark(true);
-      document.documentElement.classList.add('dark');
-    }
+    const initAuth = async () => {
+      const token = localStorage.getItem('bloxmarket-token');
+      const storedUser = localStorage.getItem('bloxmarket-user');
 
-    // Check for existing authentication token
-    const token = localStorage.getItem('bloxmarket-token');
-    if (token) {
-      // Verify token and get user data
-      apiService.getCurrentUser()
-        .then((userData) => {
-          setUser(userData);
+      if (token) {
+        apiService.setToken(token);
+
+        if (storedUser) {
+          try {
+            const u = JSON.parse(storedUser);
+            setUser(u);
+            setIsLoggedIn(true);
+          } catch {
+            localStorage.removeItem('bloxmarket-user');
+          }
+        }
+
+        try {
+          const me = await apiService.getCurrentUser();
+          setUser(me);
           setIsLoggedIn(true);
-        })
-        .catch((error) => {
-          console.error('Token verification failed:', error);
-          // Clear invalid token
-          localStorage.removeItem('bloxmarket-token');
-          apiService.clearToken();
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    } else {
+          localStorage.setItem('bloxmarket-user', JSON.stringify(me));
+        } catch (err) {
+          // Keep UI; actual auth errors will dispatch 'auth-expired'
+          console.warn('Token verify failed:', err);
+        }
+      } else {
+        setCurrentPage('auth');
+      }
+
       setIsLoading(false);
-    }
+    };
+
+    const onExpired = () => handleLogout();
+    window.addEventListener('auth-expired', onExpired);
+    initAuth();
+    return () => window.removeEventListener('auth-expired', onExpired);
   }, []);
+
+  const handleLogout = () => {
+    console.log('Logging out user');
+    setUser(null);
+    setIsLoggedIn(false);
+    setCurrentPage('auth');
+    localStorage.removeItem('bloxmarket-token');
+    localStorage.removeItem('bloxmarket-user');
+    localStorage.removeItem('bloxmarket-is-admin');
+    apiService.clearToken();
+  };
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -163,18 +185,16 @@ export default function App() {
   };
 
   const login = (userData: User) => {
+    console.log('User logged in:', userData.username);
     setUser(userData);
     setIsLoggedIn(true);
     setCurrentPage('dashboard');
+    // Store user data for persistence
+    localStorage.setItem('bloxmarket-user', JSON.stringify(userData));
   };
 
   const logout = () => {
-    setUser(null);
-    setIsLoggedIn(false);
-    setCurrentPage('auth');
-    // Clear token from localStorage and API service
-    localStorage.removeItem('bloxmarket-token');
-    apiService.clearToken();
+    handleLogout();
   };
 
   const renderCurrentPage = () => {
@@ -202,6 +222,10 @@ export default function App() {
           setCurrentPage('dashboard');
           return <Dashboard />;
         }
+      case 'my-forum-posts':
+        return <MyForumPosts />;
+      case 'my-trade-posts':
+        return <MyTradePosts />;
       default:
         return <Dashboard />;
     }

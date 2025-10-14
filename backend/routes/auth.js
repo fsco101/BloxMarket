@@ -2,87 +2,118 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Register user
+// Register route
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password, robloxUsername } = req.body;
-    console.log('Registration attempt for:', { username, email, robloxUsername });
-
-    // Validate input
+    
+    // Validation
     if (!username || !email || !password) {
-      return res.status(400).json({ error: 'Username, email, and password are required' });
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ username }, { email }]
+      $or: [{ email }, { username }]
     });
 
     if (existingUser) {
-      return res.status(400).json({ error: 'Username or email already exists' });
+      return res.status(400).json({ 
+        error: existingUser.email === email ? 'Email already registered' : 'Username already taken' 
+      });
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(password, 12);
+    const saltRounds = 12;
+    const password_hash = await bcrypt.hash(password, saltRounds);
 
-    // Create new user
-    const newUser = new User({
+    // Create user
+    const user = new User({
       username,
       email,
-      password_hash: passwordHash,
-      roblox_username: robloxUsername || undefined
+      password_hash,
+      role: 'user',
+      roblox_username: robloxUsername || null
     });
 
-    const savedUser = await newUser.save();
-    console.log('User saved successfully:', savedUser._id);
+    await user.save();
 
     // Generate JWT token
+    const secret = (process.env.JWT_SECRET || 'your-secret-key').trim();
+    const expiresIn = ((process.env.JWT_EXPIRES_IN || '30d') + '').replace(/['"]/g, '').trim();
+
     const token = jwt.sign(
-      { userId: savedUser._id, username },
-      process.env.JWT_SECRET
+      { userId: user._id, username: user.username, role: user.role },
+      secret,
+      { expiresIn }
     );
 
-    // Store token in user's tokens array
-    savedUser.tokens = savedUser.tokens.concat({ token });
-    await savedUser.save();
+    // Ensure tokens array exists, push, and keep last 5
+    user.tokens = user.tokens || [];
+    user.tokens.push({ token });
+    if (user.tokens.length > 5) user.tokens = user.tokens.slice(-5);
+    await user.save();
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User created successfully',
       token,
       user: {
-        id: savedUser._id,
-        username: savedUser.username,
-        email: savedUser.email,
-        robloxUsername: savedUser.roblox_username,
-        role: savedUser.role
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        is_verified: user.is_verified,
+        is_middleman: user.is_middleman,
+        credibility_score: user.credibility_score,
+        roblox_username: user.roblox_username,
+        avatar_url: user.avatar_url
       }
     });
-
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to register user' });
+    res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login user
+// Login route
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    // Handle both username and email fields
+    const { username, email, password } = req.body;
+    const loginIdentifier = username || email;
 
-    if (!username || !password) {
+    if (!loginIdentifier || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    // Find user by username or email
+    // Find user by email or username
     const user = await User.findOne({
-      $or: [{ username }, { email: username }]
+      $or: [
+        { email: loginIdentifier },
+        { username: loginIdentifier }
+      ]
     });
-
+    
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if user is banned
+    if (user.role === 'banned') {
+      return res.status(403).json({ error: 'Your account has been banned. Please contact support.' });
+    }
+
+    // Check if user is active
+    if (!user.is_active) {
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact support.' });
     }
 
     // Verify password
@@ -92,13 +123,19 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT token
+    const secret = (process.env.JWT_SECRET || 'your-secret-key').trim();
+    const expiresIn = ((process.env.JWT_EXPIRES_IN || '30d') + '').replace(/['"]/g, '').trim();
+
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
-      process.env.JWT_SECRET
+      { userId: user._id, username: user.username, role: user.role },
+      secret,
+      { expiresIn }
     );
 
-    // Store token in user's tokens array
-    user.tokens = user.tokens.concat({ token });
+    // Ensure tokens array exists, push, and keep last 5
+    user.tokens = user.tokens || [];
+    user.tokens.push({ token });
+    if (user.tokens.length > 5) user.tokens = user.tokens.slice(-5);
     await user.save();
 
     res.json({
@@ -108,88 +145,26 @@ router.post('/login', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
-        robloxUsername: user.roblox_username,
         role: user.role,
-        credibilityScore: user.credibility_score
+        is_verified: user.is_verified,
+        is_middleman: user.is_middleman,
+        credibility_score: user.credibility_score,
+        roblox_username: user.roblox_username,
+        avatar_url: user.avatar_url
       }
     });
-
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Failed to login' });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Verify token middleware
-export const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  try {
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Check if user exists (basic check first)
-    const user = await User.findById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Check if token exists in user's tokens array (if tokens array exists)
-    if (user.tokens && user.tokens.length > 0) {
-      const tokenExists = user.tokens.some(tokenObj => tokenObj.token === token);
-      if (!tokenExists) {
-        return res.status(401).json({ error: 'Token not found in database' });
-      }
-    }
-    // If no tokens array exists, just rely on JWT verification (backward compatibility)
-
-    req.user = decoded;
-    req.token = token;
-    next();
-  } catch (err) {
-    console.error('Token verification error:', err);
-    res.status(403).json({ error: 'Invalid or expired token' });
-  }
-};
-
-// Logout user (remove token from database)
-router.post('/logout', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId);
-    user.tokens = user.tokens.filter(tokenObj => tokenObj.token !== req.token);
-    await user.save();
-
-    res.json({ message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Failed to logout' });
-  }
-});
-
-// Logout from all devices (remove all tokens)
-router.post('/logout-all', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId);
-    user.tokens = [];
-    await user.save();
-
-    res.json({ message: 'Logged out from all devices successfully' });
-  } catch (error) {
-    console.error('Logout all error:', error);
-    res.status(500).json({ error: 'Failed to logout from all devices' });
-  }
-});
-
-// Get current user (protected route)
+// Get current user route
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password_hash');
-
+    const user = await User.findById(req.user.userId)
+      .select('-password_hash -tokens');
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -198,15 +173,33 @@ router.get('/me', authenticateToken, async (req, res) => {
       id: user._id,
       username: user.username,
       email: user.email,
-      robloxUsername: user.roblox_username,
       role: user.role,
-      credibilityScore: user.credibility_score,
-      createdAt: user.createdAt
+      is_verified: user.is_verified,
+      is_middleman: user.is_middleman,
+      credibility_score: user.credibility_score,
+      roblox_username: user.roblox_username,
+      avatar_url: user.avatar_url,
+      created_at: user.created_at
     });
-
   } catch (error) {
-    console.error('Get user error:', error);
+    console.error('Get current user error:', error);
     res.status(500).json({ error: 'Failed to get user data' });
+  }
+});
+
+// Logout route
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (user) {
+      // Remove the current token from the user's tokens array
+      user.tokens = user.tokens.filter(tokenObj => tokenObj.token !== req.token);
+      await user.save();
+    }
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 

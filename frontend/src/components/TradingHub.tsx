@@ -34,6 +34,7 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
+import { useAuth } from '../App';
 
 interface Trade {
   trade_id: string;
@@ -253,9 +254,18 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
         apiService.getTradeVotes(trade.trade_id)
       ]);
 
-      // Handle comments
+      // Handle comments - map backend response properly
       if (commentsResponse.status === 'fulfilled') {
-        setComments(commentsResponse.value.comments || []);
+        const mappedComments = commentsResponse.value.comments.map((comment: any) => ({
+          comment_id: comment.comment_id,
+          trade_id: trade.trade_id,
+          user_id: comment.user._id,
+          content: comment.content,
+          created_at: comment.created_at,
+          username: comment.user.username,
+          credibility_score: comment.user.credibility_score
+        }));
+        setComments(mappedComments);
       } else {
         console.error('Failed to load comments:', commentsResponse.reason);
         setComments([]);
@@ -284,6 +294,12 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
   const handleUpvote = async () => {
     if (!trade || votingLoading) return;
 
+    // Check if user is authenticated
+    if (!apiService.isAuthenticated()) {
+      toast.error('Please log in to vote');
+      return;
+    }
+
     try {
       setVotingLoading(true);
       console.log('Upvoting trade:', trade.trade_id);
@@ -303,7 +319,13 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
       }
     } catch (error) {
       console.error('Failed to upvote:', error);
-      toast.error('Failed to update vote');
+      if (error.message.includes('cannot vote on your own trade')) {
+        toast.error('You cannot vote on your own trade');
+      } else if (error.message.includes('401')) {
+        toast.error('Please log in to vote');
+      } else {
+        toast.error('Failed to update vote');
+      }
     } finally {
       setVotingLoading(false);
     }
@@ -311,6 +333,12 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
 
   const handleDownvote = async () => {
     if (!trade || votingLoading) return;
+
+    // Check if user is authenticated
+    if (!apiService.isAuthenticated()) {
+      toast.error('Please log in to vote');
+      return;
+    }
 
     try {
       setVotingLoading(true);
@@ -331,7 +359,13 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
       }
     } catch (error) {
       console.error('Failed to downvote:', error);
-      toast.error('Failed to update vote');
+      if (error.message.includes('cannot vote on your own trade')) {
+        toast.error('You cannot vote on your own trade');
+      } else if (error.message.includes('401')) {
+        toast.error('Please log in to vote');
+      } else {
+        toast.error('Failed to update vote');
+      }
     } finally {
       setVotingLoading(false);
     }
@@ -344,9 +378,20 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
       setSubmittingComment(true);
       console.log('Adding comment to trade:', trade.trade_id);
       
-      const comment = await apiService.addTradeComment(trade.trade_id, newComment);
+      const response = await apiService.addTradeComment(trade.trade_id, newComment);
       
-      setComments(prev => [comment, ...prev]);
+      // Map the response properly
+      const mappedComment = {
+        comment_id: response.comment.comment_id,
+        trade_id: trade.trade_id,
+        user_id: response.comment.user._id,
+        content: response.comment.content,
+        created_at: response.comment.created_at,
+        username: response.comment.user.username,
+        credibility_score: response.comment.user.credibility_score
+      };
+      
+      setComments(prev => [mappedComment, ...prev]);
       setNewComment('');
       toast.success('Comment added!');
     } catch (error) {
@@ -701,7 +746,26 @@ export function TradingHub() {
       }
       
       const response = await apiService.getTrades(params);
-      setTrades(response.trades || []);
+      
+      // Map backend response to frontend interface
+      const mappedTrades = response.trades.map((trade: any) => ({
+        trade_id: trade.trade_id,
+        item_offered: trade.item_offered,
+        item_requested: trade.item_requested,
+        description: trade.description,
+        status: trade.status,
+        created_at: trade.created_at,
+        username: trade.user.username,
+        roblox_username: trade.user.roblox_username,
+        credibility_score: trade.user.credibility_score,
+        user_id: trade.user._id,
+        images: trade.images || [],
+        upvotes: trade.upvotes || 0,
+        downvotes: trade.downvotes || 0,
+        comment_count: trade.comment_count || 0
+      }));
+      
+      setTrades(mappedTrades);
       if (response.pagination) {
         setTotalPages(response.pagination.totalPages);
       }
@@ -712,29 +776,36 @@ export function TradingHub() {
     }
   }, [currentPage, filterCategory]);
 
-  // Load current user
+  const { isLoggedIn, isLoading: authLoading } = useAuth();
+
+  // Wait for auth before calling protected endpoints (including /auth/me)
   useEffect(() => {
+    if (authLoading || !isLoggedIn || !apiService.isAuthenticated()) return;
+
     const loadCurrentUser = async () => {
       try {
-        console.log('Loading current user...');
-        const user = await apiService.getCurrentUser();
-        console.log('Current user loaded:', user);
-        setCurrentUser(user);
+        const me = await apiService.getCurrentUser();
+        setCurrentUser({
+          id: me.id,
+          username: me.username,
+          email: me.email,
+          robloxUsername: me.roblox_username,
+          role: me.role
+        });
       } catch (err) {
         console.error('Failed to load current user:', err);
+        // apiService will emit 'auth-expired' if token truly invalid
       }
     };
-    
-    console.log('Auth check:', apiService.isAuthenticated());
-    if (apiService.isAuthenticated()) {
-      loadCurrentUser();
-    }
-  }, []);
 
-  // Load trades from API
+    loadCurrentUser();
+  }, [authLoading, isLoggedIn]);
+
+  // Load trades only when authenticated
   useEffect(() => {
+    if (authLoading || !isLoggedIn) return;
     loadTrades();
-  }, [loadTrades]);
+  }, [authLoading, isLoggedIn, loadTrades]);
 
   const categories = [
     { value: 'all', label: 'All Trades' },
@@ -889,6 +960,48 @@ export function TradingHub() {
       toast.error('Failed to delete trade');
     } finally {
       setDeleteLoading(null);
+    }
+  };
+
+  const handleMarkAsTraded = async (tradeId: string, tradeTitle: string) => {
+    try {
+      setStatusUpdateLoading(tradeId);
+      await apiService.updateTradeStatus(tradeId, 'completed');
+      
+      // Update the trade in the local state
+      setTrades(prev => prev.map(trade => 
+        trade.trade_id === tradeId 
+          ? { ...trade, status: 'completed' }
+          : trade
+      ));
+      
+      toast.success(`Trade "${tradeTitle}" marked as completed!`);
+    } catch (error) {
+      console.error('Failed to mark trade as completed:', error);
+      toast.error('Failed to mark trade as completed');
+    } finally {
+      setStatusUpdateLoading(null);
+    }
+  };
+
+  const handleReopenTrade = async (tradeId: string, tradeTitle: string) => {
+    try {
+      setStatusUpdateLoading(tradeId);
+      await apiService.updateTradeStatus(tradeId, 'open');
+      
+      // Update the trade in the local state
+      setTrades(prev => prev.map(trade => 
+        trade.trade_id === tradeId 
+          ? { ...trade, status: 'open' }
+          : trade
+      ));
+      
+      toast.success(`Trade "${tradeTitle}" reopened!`);
+    } catch (error) {
+      console.error('Failed to reopen trade:', error);
+      toast.error('Failed to reopen trade');
+    } finally {
+      setStatusUpdateLoading(null);
     }
   };
 

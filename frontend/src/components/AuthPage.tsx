@@ -14,7 +14,7 @@ import { apiService } from '../services/api';
 export function AuthPage() {
   const { login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // Keep as username
   const [registerForm, setRegisterForm] = useState({
     username: '',
     email: '',
@@ -31,15 +31,54 @@ export function AuthPage() {
     setIsLoading(true);
 
     try {
+      // Use the state values directly instead of FormData
+      const username = loginForm.username?.trim();
+      const password = loginForm.password;
+
+      // Validate input
+      if (!username || !password) {
+        setError('Please enter both username/email and password.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Attempting login with:', { username, password: password ? '[REDACTED]' : 'empty' });
+
+      // Send username (which can be email or username) in the login request
       const response = await apiService.login({
-        username: loginForm.username,
-        password: loginForm.password
+        username: username,
+        password: password
       });
-      
+
+      // Ensure token is persisted and ApiService has it
+      if (response.token) {
+        apiService.setToken(response.token);
+        localStorage.setItem('bloxmarket-token', response.token);
+        localStorage.setItem('bloxmarket-user', JSON.stringify(response.user));
+      }
+
       // Login successful, update auth context
       login(response.user);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      let errorMessage = 'Login failed. Please check your credentials.';
+      
+      if (error?.message) {
+        // Handle specific error messages from the backend
+        if (error.message.includes('banned')) {
+          errorMessage = 'Your account has been banned. Please contact support.';
+        } else if (error.message.includes('deactivated') || error.message.includes('disabled')) {
+          errorMessage = 'Your account has been deactivated. Please contact support.';
+        } else if (error.message.includes('Invalid credentials')) {
+          errorMessage = 'Invalid username/email or password. Please try again.';
+        } else if (error.message.includes('required')) {
+          errorMessage = 'Please enter both username/email and password.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -61,8 +100,8 @@ export function AuthPage() {
       
       // Registration successful, update auth context
       login(response.user);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed. Please try again.';
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Registration failed. Please try again.';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -121,6 +160,7 @@ export function AuthPage() {
                     <Label htmlFor="username">Username or Email</Label>
                     <Input
                       id="username"
+                      name="username"
                       type="text"
                       placeholder="Enter your username or email"
                       value={loginForm.username}
@@ -133,6 +173,7 @@ export function AuthPage() {
                     <Label htmlFor="password">Password</Label>
                     <Input
                       id="password"
+                      name="password"
                       type="password"
                       placeholder="Enter your password"
                       value={loginForm.password}

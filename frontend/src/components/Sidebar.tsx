@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp, useAuth, useTheme } from '../App';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -28,15 +28,17 @@ import {
   AlertTriangle,
   UserCheck,
   ShoppingCart,
-  BarChart3
+  BarChart3,
+  FileText,
+  Package
 } from 'lucide-react';
 
 export function Sidebar() {
   const { currentPage, setCurrentPage } = useApp();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth(); // was `loading`
   const { isDark, toggleTheme } = useTheme();
-
-  // Check if user is admin or moderator
+  
+  // Simplified admin status check - directly from user object
   const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
 
   const adminMenuItems = [
@@ -57,23 +59,52 @@ export function Sidebar() {
     { id: 'wishlist', label: 'Wishlist', icon: Heart },
     { id: 'middleman', label: 'Middleman Directory', icon: Shield },
     { id: 'forums', label: 'Forums', icon: MessageSquare },
-    { id: 'events', label: 'Events & Giveaways', icon: Calendar },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'events', label: 'Events & Giveaways', icon: Calendar }
+  ];
+
+  const profileMenuItems = [
+    { id: 'profile', label: 'Profile Overview', icon: User },
+    { id: 'my-forum-posts', label: 'My Forum Posts', icon: FileText },
+    { id: 'my-trade-posts', label: 'My Trade Posts', icon: Package }
   ];
 
   const handleAdminMenuClick = (itemId: string) => {
     // Set current page to admin for all admin-related pages
     setCurrentPage('admin');
     
-    // You can add additional logic here to communicate with AdminPanel
-    // about which section should be active
+    // Communicate with AdminPanel about which section should be active
     if (itemId !== 'admin') {
       // Extract the section name (remove 'admin-' prefix)
       const section = itemId.replace('admin-', '');
-      // You could dispatch a custom event or use a global state manager
+      // Dispatch custom event for AdminPanel to listen to
       window.dispatchEvent(new CustomEvent('admin-section-change', { detail: section }));
+    } else {
+      // Reset to dashboard when clicking main admin item
+      window.dispatchEvent(new CustomEvent('admin-section-change', { detail: 'dashboard' }));
     }
   };
+
+  const handleProfileMenuClick = (itemId: string) => {
+    setCurrentPage(itemId);
+  };
+
+  // Check if current page is a profile-related page
+  const isProfilePage = profileMenuItems.some(item => item.id === currentPage);
+
+  // Debug logging to help identify issues
+  useEffect(() => {
+    console.log('Sidebar Debug:', {
+      user: user,
+      userRole: user?.role,
+      userObject: JSON.stringify(user, null, 2),
+      isAdminOrModerator: isAdminOrModerator,
+      loading: isLoading,
+      localStorage: {
+        token: !!localStorage.getItem('bloxmarket-token'),
+        storedUser: !!localStorage.getItem('bloxmarket-user')
+      }
+    });
+  }, [user, isAdminOrModerator, isLoading]);
 
   return (
     <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0 flex-shrink-0">
@@ -137,7 +168,39 @@ export function Sidebar() {
             </Button>
           ))}
 
-          {/* Admin Dropdown Menu */}
+          {/* Profile Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={isProfilePage ? "secondary" : "ghost"}
+                className={`w-full justify-start h-10 ${
+                  isProfilePage
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                }`}
+              >
+                <User className="w-4 h-4 mr-3" />
+                Profile
+                <ChevronDown className="w-4 h-4 ml-auto" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {profileMenuItems.map(({ id, label, icon: Icon }) => (
+                <DropdownMenuItem
+                  key={id}
+                  onClick={() => handleProfileMenuClick(id)}
+                  className={`flex items-center gap-2 cursor-pointer ${
+                    currentPage === id ? 'bg-accent text-accent-foreground' : ''
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Admin Dropdown Menu - Simplified condition */}
           {isAdminOrModerator && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -167,6 +230,15 @@ export function Sidebar() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          )}
+
+          {/* Debug Info - Remove this after fixing */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="p-2 text-xs text-muted-foreground border rounded">
+              Role: {user?.role || 'none'}<br/>
+              Admin: {isAdminOrModerator ? 'yes' : 'no'}<br/>
+              Loading: {isLoading ? 'yes' : 'no'}
+            </div>
           )}
         </div>
       </nav>

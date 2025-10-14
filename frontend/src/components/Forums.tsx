@@ -34,6 +34,7 @@ import {
   Send
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../App';
 
 interface User {
   id: string;
@@ -599,6 +600,13 @@ function PostDetailsModal({ post, isOpen, onClose, onEdit, onDelete, canEdit, ca
 }
 
 export function Forums() {
+  const { isLoggedIn, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (authLoading || !isLoggedIn || !apiService.isAuthenticated()) return;
+    // fetch posts here
+  }, [authLoading, isLoggedIn]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
