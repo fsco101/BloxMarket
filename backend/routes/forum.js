@@ -45,6 +45,9 @@ router.post('/posts', authenticateToken, upload.array('images', 5), forumControl
 router.put('/posts/:postId', authenticateToken, upload.array('images', 5), forumController.updateForumPost);
 router.delete('/posts/:postId', authenticateToken, forumController.deleteForumPost);
 
+// User’s own posts (history)
+router.get('/user/:userId', authenticateToken, forumController.getUserForumPosts);
+
 // Forum interaction routes
 router.post('/posts/:postId/vote', authenticateToken, forumController.voteOnForumPost);
 router.post('/posts/:postId/comments', authenticateToken, forumController.addForumComment);

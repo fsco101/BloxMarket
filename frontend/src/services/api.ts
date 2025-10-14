@@ -1043,6 +1043,20 @@ class ApiService {
       throw error;
     }
   }
+
+  // Fetch all forum posts (for fallback filtering)
+  async getForumPosts(params: { page?: number; limit?: number; search?: string; category?: string } = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
+    });
+    const endpoint = `/forum/posts${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const data = await this.request(endpoint, { method: 'GET' });
+    if (Array.isArray(data)) return data;
+    if (Array.isArray((data as any)?.posts)) return (data as any).posts;
+    if (Array.isArray((data as any)?.data)) return (data as any).data;
+    return [];
+  }
 }
 
 export const apiService = new ApiService();

@@ -85,78 +85,102 @@ export function MyForumPosts() {
     try {
       setLoading(true);
       setError('');
-      
-      // First get current user
+
+      // Get current user first
       const currentUser = await apiService.getCurrentUser();
-      if (!currentUser) {
+      if (!currentUser?.id) {
         setError('Please log in to view your posts');
+        setPosts([]);
         return;
       }
 
-      console.log('Loading posts for user:', currentUser.id); // Debug log
+      console.log('Loading forum posts for user:', currentUser.id);
 
-      // Try to get user-specific forum posts if API supports it
+      // Try user-specific endpoint first, with robust mapping
       let myPosts: ForumPost[] = [];
-      
       try {
-        // Primary: Use dedicated user posts endpoint
-        console.log('Attempting to fetch user-specific posts...');
-        myPosts = await apiService.getUserForumPosts(currentUser.id);
-        console.log('Successfully fetched user posts:', myPosts.length);
+        console.log('Attempting to fetch user-specific forum posts...');
+        const userPostsResponse = await apiService.getUserForumPosts(currentUser.id);
+
+        if (Array.isArray(userPostsResponse)) {
+          myPosts = userPostsResponse.map((post: any) => ({
+            post_id: post.post_id || post._id,
+            title: post.title,
+            content: post.content,
+            category: post.category || 'general',
+            upvotes: post.upvotes || 0,
+            downvotes: post.downvotes || 0,
+            created_at: post.created_at || post.createdAt,
+            updated_at: post.updated_at || post.updatedAt,
+            username: post.username || post.user?.username || currentUser.username,
+            credibility_score: post.credibility_score || post.user?.credibility_score || 0,
+            user_id: post.user_id || post.userId || post.user?._id || currentUser.id,
+            images: Array.isArray(post.images) ? post.images.map((img: any) => ({
+              filename: img.filename || img.image_url || String(img).split('/').pop(),
+              originalName: img.originalName
+            })) : [],
+            commentCount: post.commentCount || post.comments_count || (Array.isArray(post.comments) ? post.comments.length : 0)
+          }));
+        }
+
+        console.log('Successfully fetched user forum posts:', myPosts.length);
       } catch (userEndpointError) {
-        console.log('User-specific endpoint failed, trying filtered approach:', userEndpointError);
-        
+        console.log('User-specific forum endpoint failed, trying filtered approach:', userEndpointError);
+
         try {
-          // Secondary: Get posts with user_id filter if supported
-          const allPosts = await apiService.getForumPosts({ 
-            limit: 1000,
-            user_id: currentUser.id
-          });
-          
-          if (Array.isArray(allPosts)) {
-            myPosts = allPosts.filter(post => 
-              post.user_id === currentUser.id || 
-              post.user_id === currentUser._id ||
-              post.username === currentUser.username
-            );
-            console.log('Filtered posts from API:', myPosts.length);
+          // Fallback: fetch all forum posts, then filter client-side
+          const allForumResp = await apiService.getForumPosts({ limit: 1000 });
+          let allPosts: any[] = [];
+
+          if (allForumResp && Array.isArray(allForumResp.posts)) {
+            allPosts = allForumResp.posts;
+          } else if (Array.isArray(allForumResp)) {
+            allPosts = allForumResp;
+          } else if (allForumResp && allForumResp.data && Array.isArray(allForumResp.data)) {
+            allPosts = allForumResp.data;
           }
-        } catch (filteredError) {
-          console.log('Filtered approach failed, using fallback:', filteredError);
-          
-          try {
-            // Fallback: Get all posts and filter client-side
-            const allPosts = await apiService.getForumPosts({ limit: 1000 });
-            
-            if (Array.isArray(allPosts)) {
-              myPosts = allPosts.filter(post => {
-                // More robust filtering with multiple ID checks
-                const matchesId = post.user_id === currentUser.id || 
-                                post.user_id === currentUser._id;
-                const matchesUsername = post.username === currentUser.username;
-                
-                return matchesId || matchesUsername;
-              });
-              console.log('Client-side filtered posts:', myPosts.length);
-            }
-          } catch (fallbackError) {
-            console.error('All fallback methods failed:', fallbackError);
-            throw new Error('Unable to load your forum posts. Please try again later.');
-          }
+
+          myPosts = allPosts
+            .map((post: any) => ({
+              post_id: post.post_id || post._id,
+              title: post.title,
+              content: post.content,
+              category: post.category || 'general',
+              upvotes: post.upvotes || 0,
+              downvotes: post.downvotes || 0,
+              created_at: post.created_at || post.createdAt,
+              updated_at: post.updated_at || post.updatedAt,
+              username: post.user?.username || post.username,
+              credibility_score: post.user?.credibility_score || post.credibility_score || 0,
+              user_id: post.user_id || post.userId || post.user?._id,
+              images: Array.isArray(post.images) ? post.images.map((img: any) => ({
+                filename: img.filename || img.image_url || String(img).split('/').pop(),
+                originalName: img.originalName
+              })) : [],
+              commentCount: post.commentCount || post.comments_count || (Array.isArray(post.comments) ? post.comments.length : 0)
+            }))
+            .filter((post: ForumPost) => {
+              const matchesId = post.user_id === currentUser.id || post.user_id === currentUser._id;
+              const matchesUsername = post.username === currentUser.username;
+              return matchesId || matchesUsername;
+            });
+
+          console.log('Client-side filtered forum posts:', myPosts.length);
+        } catch (fallbackError) {
+          console.error('All fallback methods for forum posts failed:', fallbackError);
+          throw new Error('Unable to load your forum posts. Please try again later.');
         }
       }
-      
-      // Sort posts by creation date (newest first) for better UX
-      const sortedPosts = myPosts.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+
+      // Sort newest first
+      const sortedPosts = myPosts.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-      
+
       setPosts(sortedPosts || []);
-      
       if (sortedPosts.length === 0) {
-        console.log('No posts found for current user');
+        console.log('No forum posts found for current user');
       }
-      
     } catch (err) {
       console.error('Error loading my forum posts:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load your forum posts';

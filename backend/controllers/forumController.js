@@ -533,5 +533,57 @@ export const forumController = {
       console.error('Delete forum post error:', error);
       res.status(500).json({ error: 'Failed to delete forum post' });
     }
+  },
+
+  // Get posts authored by a specific user (auth required)
+  getUserForumPosts: async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      // Only allow the same user or staff to view this history
+      const requesterId = String(req.user.userId);
+      const isSelf = requesterId === String(userId);
+      const isStaff = req.user.role === 'admin' || req.user.role === 'moderator';
+      if (!isSelf && !isStaff) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const posts = await ForumPost.find({ user_id: userId })
+        .populate('user_id', 'username credibility_score')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      // Count comments for each post
+      const postsWithCounts = await Promise.all(
+        posts.map(async (post) => {
+          const commentCount = await ForumComment.countDocuments({ post_id: post._id });
+          return {
+            post_id: post._id,
+            title: post.title,
+            content: post.content,
+            category: post.category,
+            upvotes: post.upvotes || 0,
+            downvotes: post.downvotes || 0,
+            created_at: post.createdAt,
+            updated_at: post.updatedAt || post.createdAt,
+            username: post.user_id?.username,
+            credibility_score: post.user_id?.credibility_score ?? 0,
+            user_id: post.user_id?._id?.toString(),
+            images: Array.isArray(post.images)
+              ? post.images.map(img => ({
+                  filename: img.filename,
+                  originalName: img.originalName
+                }))
+              : [],
+            commentCount
+          };
+        })
+      );
+
+      return res.json({ posts: postsWithCounts, total: postsWithCounts.length });
+    } catch (error) {
+      console.error('Get user forum posts error:', error);
+      res.status(500).json({ error: 'Failed to fetch user forum posts' });
+    }
   }
 };
