@@ -24,6 +24,8 @@ import adminRoutes from './routes/admin.js';
 import uploadsRoutes from './routes/uploads.js';
 import userDatatableRoutes from './routes/datatables/userDatatableRoutes.js';
 import eventsDatatableRoutes from './routes/datatables/eventsDatatableRoutes.js';
+import forumDatatableRoutes from './routes/datatables/forumDatatableRoutes.js';
+import tradingPostDatatableRoutes from './routes/datatables/tradingPostDatatableRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -107,6 +109,8 @@ app.use('/api/admin/datatables', userDatatableRoutes);
 // Admin DataTable Routes
 app.use('/api/admin/datatables/users', userDatatableRoutes);
 app.use('/api/admin/datatables/events', eventsDatatableRoutes);
+app.use('/api/admin/datatables/forum', forumDatatableRoutes);
+app.use('/api/admin/datatables/trading-posts', tradingPostDatatableRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

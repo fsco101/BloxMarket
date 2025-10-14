@@ -1143,28 +1143,162 @@ class ApiService {
     document.body.removeChild(a);
   }
 
-  // Event voting methods for EventsGiveaways component
-  async voteEvent(eventId: string, voteType: 'up' | 'down') {
-    return await this.request(`/events/${eventId}/vote`, {
-      method: 'POST',
-      body: JSON.stringify({ voteType })
+  // Forum Management (Admin DataTables)
+  async getForumPostsDataTable(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    category?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    
+    const response = await this.request(`/admin/datatables/forum?${queryParams.toString()}`);
+    return response;
+  }
+
+  async getForumPostDetailsAdmin(postId: string) {
+    const response = await this.request(`/admin/datatables/forum/${postId}`);
+    return response.post;
+  }
+
+  async deleteForumPostAdmin(postId: string) {
+    return await this.request(`/admin/datatables/forum/${postId}`, {
+      method: 'DELETE'
     });
   }
 
-  async getEventVotes(eventId: string) {
-    return await this.request(`/events/${eventId}/votes`);
-  }
-
-  async getEventComments(eventId: string) {
-    return await this.request(`/events/${eventId}/comments`);
-  }
-
-  async addEventComment(eventId: string, content: string) {
-    const response = await this.request(`/events/${eventId}/comments`, {
+  async bulkDeleteForumPosts(postIds: string[]) {
+    return await this.request('/admin/datatables/forum/bulk/delete', {
       method: 'POST',
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ postIds })
     });
-    return response.comment;
+  }
+
+  async getForumStatistics() {
+    return await this.request('/admin/datatables/forum/statistics');
+  }
+
+  async exportForumPostsCSV(category?: string) {
+    const queryParams = category ? `?category=${category}` : '';
+    const token = localStorage.getItem('bloxmarket-token');
+    
+    const response = await fetch(
+      `${API_BASE_URL}/admin/datatables/forum/export/csv${queryParams}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to export forum posts');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `forum-posts-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
+  // Trading Post Management (Admin DataTables) - Add before closing brace
+  async getTradingPostsDataTable(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    type?: string;
+    status?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    
+    const response = await this.request(`/admin/datatables/trading-posts?${queryParams.toString()}`);
+    return response;
+  }
+
+  async getTradingPostDetailsAdmin(postId: string) {
+    const response = await this.request(`/admin/datatables/trading-posts/${postId}`);
+    return response.post;
+  }
+
+  async deleteTradingPostAdmin(postId: string) {
+    return await this.request(`/admin/datatables/trading-posts/${postId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async moderateTradingPost(postId: string, action: string, reason?: string) {
+    return await this.request(`/admin/datatables/trading-posts/${postId}/moderate`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action, reason })
+    });
+  }
+
+  async bulkDeleteTradingPosts(postIds: string[]) {
+    return await this.request('/admin/datatables/trading-posts/bulk/delete', {
+      method: 'POST',
+      body: JSON.stringify({ postIds })
+    });
+  }
+
+  async getTradingPostStatistics() {
+    return await this.request('/admin/datatables/trading-posts/statistics');
+  }
+
+  async exportTradingPostsCSV(status?: string, type?: string) {
+    const queryParams = new URLSearchParams();
+    if (status) queryParams.append('status', status);
+    if (type) queryParams.append('type', type);
+    
+    const queryString = queryParams.toString();
+    const token = localStorage.getItem('bloxmarket-token');
+    
+    const response = await fetch(
+      `${API_BASE_URL}/admin/datatables/trading-posts/export/csv${queryString ? '?' + queryString : ''}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to export trading posts');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trading-posts-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   }
 }
 

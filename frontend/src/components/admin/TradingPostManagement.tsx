@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -61,39 +61,191 @@ export function TradingPostManagement() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  const tableRef = useRef<HTMLTableElement>(null);
+  const dataTableRef = useRef<any>(null);
+  const isInitialized = useRef(false);
+  const [jQueryReady, setJQueryReady] = useState(false);
+
+  const checkJQueryReady = () => {
+    return new Promise<boolean>((resolve) => {
+      let attempts = 0;
+      const maxAttempts = 50;
+      
+      const checkInterval = setInterval(() => {
+        attempts++;
+        
+        if (window.$ && window.$.fn && window.$.fn.DataTable) {
+          console.log('jQuery and DataTables are ready');
+          clearInterval(checkInterval);
+          resolve(true);
+        } else if (attempts >= maxAttempts) {
+          console.error('jQuery/DataTables failed to load after 5 seconds');
+          clearInterval(checkInterval);
+          resolve(false);
+        }
+      }, 100);
+  });
+  };
+
+  // Add jQuery initialization
+  useEffect(() => {
+    const initJQuery = async () => {
+      const ready = await checkJQueryReady();
+      setJQueryReady(ready);
+      
+      if (!ready) {
+        console.warn('jQuery/DataTables not loaded, using basic table');
+      }
+    };
+    
+    initJQuery();
+  }, []);
+
   const loadTradingPosts = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getTradingPosts({
+      console.log('Loading trading posts...');
+      
+      const response = await apiService.getTradingPostsDataTable({
         page,
-        limit: 20,
+        limit: 1000,
         search: searchTerm,
         type: typeFilter === 'all' ? '' : typeFilter,
         status: statusFilter === 'all' ? '' : statusFilter
       });
       
+      console.log('Trading posts response:', response);
+      
+      if (!response || !response.posts) {
+        throw new Error('Invalid response format from server');
+      }
+      
       setPosts(response.posts || []);
-      setTotalPages(response.totalPages || 1);
-    } catch (error) {
+      setTotalPages(response.pagination?.totalPages || 1);
+      
+      // Initialize DataTable if jQuery is ready
+      if (jQueryReady && !isInitialized.current) {
+        setTimeout(() => {
+          initializeDataTable(response.posts);
+        }, 200);
+      } else if (jQueryReady && dataTableRef.current) {
+        // Update existing DataTable
+        try {
+          dataTableRef.current.clear();
+          dataTableRef.current.rows.add(response.posts);
+          dataTableRef.current.draw();
+        } catch (err) {
+          console.error('Error updating DataTable:', err);
+        }
+      }
+      
+    } catch (error: any) {
       console.error('Error loading trading posts:', error);
-      toast.error('Failed to load trading posts');
+      
+      let errorMessage = 'Failed to load trading posts';
+      
+      if (error.response?.status === 403) {
+        errorMessage = 'Access denied. Admin or moderator privileges required.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication required. Please log in again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  // Add DataTable initialization function
+  const initializeDataTable = (postData: TradingPost[]) => {
+    if (!window.$ || !window.$.fn || !window.$.fn.DataTable) {
+      console.warn('DataTables not available');
+      return;
+    }
+
+    if (!tableRef.current) {
+      console.error('Table ref not available');
+      return;
+    }
+
+    const $ = window.$;
+    
+    try {
+      if (dataTableRef.current) {
+        dataTableRef.current.destroy();
+      }
+
+      dataTableRef.current = $(tableRef.current).DataTable({
+        data: postData,
+        destroy: true,
+        responsive: true,
+        pageLength: 25,
+        order: [[0, 'desc']],
+        columns: [
+          { title: 'Post', data: 'title' },
+          { title: 'Author', data: 'author.username' },
+          { title: 'Type', data: 'type' },
+          { title: 'Price', data: 'price' },
+          { title: 'Status', data: 'status' },
+          { title: 'Created', data: 'createdAt' },
+          { title: 'Actions', data: null, orderable: false }
+        ]
+      });
+
+      isInitialized.current = true;
+    } catch (error) {
+      console.error('Error initializing DataTable:', error);
+    }
+  };
+
+  // Load posts when component mounts and when filters change
+  useEffect(() => {
+    if (!apiService.isAuthenticated()) {
+      toast.error('You must be logged in to access this page');
+      setLoading(false);
+      return;
+    }
+
+    if (jQueryReady) {
+      loadTradingPosts();
+    }
+
+    return () => {
+      if (dataTableRef.current) {
+        try {
+          dataTableRef.current.destroy();
+          dataTableRef.current = null;
+          isInitialized.current = false;
+        } catch (err) {
+          console.error('Error destroying DataTable:', err);
+        }
+      }
+    };
+  }, [jQueryReady, page, typeFilter, statusFilter]);
+
+  // Debounced search
   useEffect(() => {
     const delayedLoad = setTimeout(() => {
-      loadTradingPosts();
+      if (jQueryReady && searchTerm !== undefined) {
+        loadTradingPosts();
+      }
     }, 300);
 
     return () => clearTimeout(delayedLoad);
-  }, [searchTerm, typeFilter, statusFilter, page]);
+  }, [searchTerm]);
 
   const handlePostAction = async (postId: string, action: string, data?: any) => {
     try {
       setActionLoading(postId);
-      await apiService.moderateTradingPost(postId, action, data);
+      
+      if (action === 'delete') {
+        await apiService.deleteTradingPostAdmin(postId);
+      } else {
+        await apiService.moderateTradingPost(postId, action, data?.reason);
+      }
+      
       toast.success(`Trading post ${action}ed successfully`);
       loadTradingPosts();
     } catch (error) {
