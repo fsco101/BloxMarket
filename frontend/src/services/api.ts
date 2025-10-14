@@ -618,7 +618,14 @@ class ApiService {
 
   async deleteEvent(eventId: string) {
     return this.request(`/events/${eventId}`, {
-      method: 'DELETE',
+      method: 'DELETE'
+    });
+  }
+
+  // Update the deleteEvent method to use the admin endpoint
+  async deleteEventAdmin(eventId: string) {
+    return await this.request(`/admin/datatables/events/${eventId}`, {
+      method: 'DELETE'
     });
   }
 
@@ -1056,6 +1063,108 @@ class ApiService {
     if (Array.isArray((data as any)?.posts)) return (data as any).posts;
     if (Array.isArray((data as any)?.data)) return (data as any).data;
     return [];
+  }
+
+  // Events Management (Admin DataTables) - Add these methods before the closing brace of the class
+  async getEventsDataTable(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    type?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    
+    const response = await this.request(`/admin/datatables/events?${queryParams.toString()}`);
+    return response;
+  }
+
+  async getEventDetailsAdmin(eventId: string) {
+    const response = await this.request(`/admin/datatables/events/${eventId}`);
+    return response.event;
+  }
+
+  async deleteEventAdmin(eventId: string) {
+    return await this.request(`/admin/datatables/events/${eventId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async bulkDeleteEvents(eventIds: string[]) {
+    return await this.request('/admin/datatables/events/bulk/delete', {
+      method: 'POST',
+      body: JSON.stringify({ eventIds })
+    });
+  }
+
+  async getEventStatistics() {
+    return await this.request('/admin/datatables/events/statistics');
+  }
+
+  async exportEventsCSV(status?: string, type?: string) {
+    const queryParams = new URLSearchParams();
+    if (status) queryParams.append('status', status);
+    if (type) queryParams.append('type', type);
+    
+    const queryString = queryParams.toString();
+    const token = localStorage.getItem('bloxmarket-token');
+    
+    const response = await fetch(
+      `${API_BASE_URL}/admin/datatables/events/export/csv${queryString ? '?' + queryString : ''}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to export events');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `events-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
+  // Event voting methods for EventsGiveaways component
+  async voteEvent(eventId: string, voteType: 'up' | 'down') {
+    return await this.request(`/events/${eventId}/vote`, {
+      method: 'POST',
+      body: JSON.stringify({ voteType })
+    });
+  }
+
+  async getEventVotes(eventId: string) {
+    return await this.request(`/events/${eventId}/votes`);
+  }
+
+  async getEventComments(eventId: string) {
+    return await this.request(`/events/${eventId}/comments`);
+  }
+
+  async addEventComment(eventId: string, content: string) {
+    const response = await this.request(`/events/${eventId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    });
+    return response.comment;
   }
 }
 

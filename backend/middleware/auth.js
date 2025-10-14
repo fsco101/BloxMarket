@@ -40,8 +40,17 @@ export const authenticateToken = async (req, res, next) => {
     if (user.role === 'banned') return res.status(403).json({ error: 'Account is banned' });
     if (!user.is_active) return res.status(403).json({ error: 'Account is deactivated' });
 
-    req.user = { ...decoded, userData: user };
+    // Set req.user with both decoded token data and full user object
+    req.user = {
+      userId: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      userData: user
+    };
     req.token = token;
+    
+    console.log('Authenticated user:', req.user.username, 'Role:', req.user.role);
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -50,8 +59,19 @@ export const authenticateToken = async (req, res, next) => {
 };
 
 export const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
-    return res.status(403).json({ error: 'Admin access required' });
+  console.log('RequireAdmin check - User:', req.user?.username, 'Role:', req.user?.role);
+  
+  if (!req.user) {
+    console.log('No user object found');
+    return res.status(401).json({ error: 'Authentication required' });
   }
+
+  // Check role from req.user.role (set in authenticateToken)
+  if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
+    console.log('Access denied - User role:', req.user.role);
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  console.log('Admin access granted');
   next();
 };

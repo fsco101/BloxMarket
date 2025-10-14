@@ -22,6 +22,8 @@ import forumRoutes from './routes/forum.js';
 import eventRoutes from './routes/events.js';
 import adminRoutes from './routes/admin.js';
 import uploadsRoutes from './routes/uploads.js';
+import userDatatableRoutes from './routes/datatables/userDatatableRoutes.js';
+import eventsDatatableRoutes from './routes/datatables/eventsDatatableRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -100,6 +102,11 @@ app.use('/api/forum', forumRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/uploads', uploadsRoutes);
+app.use('/api/admin/datatables', userDatatableRoutes);
+
+// Admin DataTable Routes
+app.use('/api/admin/datatables/users', userDatatableRoutes);
+app.use('/api/admin/datatables/events', eventsDatatableRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
