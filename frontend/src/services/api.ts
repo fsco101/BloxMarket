@@ -214,44 +214,20 @@ class ApiService {
     });
   }
 
-  async updateTrade(tradeId: string, tradeData: {
-    itemOffered: string;
-    itemRequested?: string;
-    description?: string;
-  }, images?: File[]) {
-    console.log('Updating trade:', tradeId, tradeData);
-    
-    const formData = new FormData();
-    formData.append('itemOffered', tradeData.itemOffered);
-    if (tradeData.itemRequested) {
-      formData.append('itemRequested', tradeData.itemRequested);
-    }
-    if (tradeData.description) {
-      formData.append('description', tradeData.description);
-    }
-    
-    // Add new images if provided
-    if (images && images.length > 0) {
-      images.forEach((image, index) => {
-        formData.append('images', image);
-      });
-    }
-    
-    const token = localStorage.getItem('bloxmarket-token');
-    const response = await fetch(`${API_BASE_URL}/trades/${tradeId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
+  async updateTrade(
+    tradeId: string,
+    tradeData: { itemOffered: string; itemRequested?: string; description?: string },
+    images?: File[] // images are ignored by backend on edit; route doesn't handle files
+  ) {
+    // Send JSON; backend updateTrade expects camelCase fields
+    return this.request(`/trades/${tradeId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        itemOffered: tradeData.itemOffered,
+        itemRequested: tradeData.itemRequested,
+        description: tradeData.description,
+      }),
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to update trade');
-    }
-    
-    return await response.json();
   }
 
   async updateTradeStatus(tradeId: string, status: string) {
