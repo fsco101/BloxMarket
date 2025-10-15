@@ -1300,6 +1300,65 @@ class ApiService {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   }
+
+  // Wishlist endpoints
+  async getWishlists(params?: Record<string, string | number>) {
+    const queryString = params 
+      ? '?' + Object.entries(params)
+          .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+          .join('&')
+      : '';
+    
+    return this.request(`/wishlists${queryString}`);
+  }
+
+  async getWishlistById(wishlistId: string) {
+    return this.request(`/wishlists/${wishlistId}`);
+  }
+
+  async createWishlist(data: {
+    item_name: string;
+    description: string;
+    max_price: string;
+    category: string;
+    priority: 'high' | 'medium' | 'low';
+  }) {
+    return this.request('/wishlists', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateWishlist(wishlistId: string, data: {
+    item_name: string;
+    description: string;
+    max_price: string;
+    category: string;
+    priority: 'high' | 'medium' | 'low';
+  }) {
+    return this.request(`/wishlists/${wishlistId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteWishlist(wishlistId: string) {
+    return this.request(`/wishlists/${wishlistId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Wishlist comments
+  async getWishlistComments(wishlistId: string) {
+    return this.request(`/wishlists/${wishlistId}/comments`);
+  }
+
+  async addWishlistComment(wishlistId: string, content: string) {
+    return this.request(`/wishlists/${wishlistId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    });
+  }
 }
 
 export const apiService = new ApiService();

@@ -10,9 +10,70 @@ const wishlistSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  description: {
+    type: String,
+    default: ''
+  },
+  max_price: {
+    type: String,
+    default: 'Negotiable'
+  },
+  category: {
+    type: String,
+    required: true,
+    enum: ['limiteds', 'accessories', 'gear', 'event-items', 'gamepasses']
+  },
+  priority: {
+    type: String,
+    enum: ['high', 'medium', 'low'],
+    default: 'medium'
+  },
+  watchers: {
+    type: Number,
+    default: 0
+  },
+  created_at: {
+    type: Date,
+    default: Date.now
+  },
+  updated_at: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
 });
 
+wishlistSchema.index({ user_id: 1, created_at: -1 });
+wishlistSchema.index({ category: 1, created_at: -1 });
+wishlistSchema.index({ item_name: 'text', description: 'text' });
+
+// Wishlist Comment Schema
+const wishlistCommentSchema = new mongoose.Schema({
+  wishlist_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Wishlist',
+    required: true
+  },
+  user_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  content: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  created_at: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+wishlistCommentSchema.index({ wishlist_id: 1, created_at: -1 });
+wishlistCommentSchema.index({ user_id: 1 });
+
 export const Wishlist = mongoose.model('Wishlist', wishlistSchema);
+export const WishlistComment = mongoose.model('WishlistComment', wishlistCommentSchema);

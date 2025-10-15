@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardFooter } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Avatar, AvatarFallback } from './ui/avatar';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogBody,
+  DialogFooter
+} from './ui/dialog';
+import { apiService } from '../services/api';
 import { 
   Plus, 
   Search, 
@@ -17,13 +27,394 @@ import {
   Clock,
   DollarSign,
   TrendingUp,
-  Filter
+  Filter,
+  Loader2,
+  Edit,
+  Trash2,
+  Send,
+  AlertCircle,
+  Eye
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuth } from '../App';
+
+interface WishlistItem {
+  wishlist_id: string;
+  item_name: string;
+  description: string;
+  max_price: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  created_at: string;
+  updated_at?: string;
+  user_id: string;
+  username: string;
+  credibility_score: number;
+  watchers?: number;
+  comment_count?: number;
+}
+
+interface WishlistComment {
+  comment_id: string;
+  wishlist_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  username: string;
+  credibility_score?: number;
+}
+
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  robloxUsername?: string;
+  role?: string;
+}
+
+interface WishlistDetailsModalProps {
+  wishlist: WishlistItem | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  canEdit: boolean;
+  canDelete: boolean;
+  deleteLoading: boolean;
+}
+
+// Date formatting helper
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return 'Unknown date';
+  }
+};
+
+// Wishlist Details Modal Component
+function WishlistDetailsModal({ 
+  wishlist, 
+  isOpen, 
+  onClose, 
+  onEdit, 
+  onDelete, 
+  canEdit, 
+  canDelete, 
+  deleteLoading 
+}: WishlistDetailsModalProps) {
+  const [comments, setComments] = useState<WishlistComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && wishlist) {
+      loadComments();
+    }
+  }, [isOpen, wishlist]);
+
+  const loadComments = async () => {
+    if (!wishlist) return;
+
+    try {
+      setLoadingComments(true);
+      console.log('Loading wishlist comments for:', wishlist.wishlist_id);
+      
+      const response = await apiService.getWishlistComments(wishlist.wishlist_id);
+      setComments(response.comments || []);
+    } catch (error) {
+      console.error('Failed to load comments:', error);
+      toast.error('Failed to load comments');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !wishlist || submittingComment) return;
+
+    try {
+      setSubmittingComment(true);
+      console.log('Adding comment to wishlist:', wishlist.wishlist_id);
+      
+      const comment = await apiService.addWishlistComment(wishlist.wishlist_id, newComment);
+      
+      setComments(prev => [comment, ...prev]);
+      setNewComment('');
+      toast.success('Comment added!');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      toast.error('Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  if (!wishlist) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Heart className="w-5 h-5 text-red-500" />
+            Wishlist Details
+          </DialogTitle>
+        </DialogHeader>
+
+        <DialogBody>
+          {/* User Info */}
+          <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg mb-4">
+            <Avatar className="w-12 h-12">
+              <AvatarFallback>{wishlist.username?.[0] || 'U'}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{wishlist.username}</span>
+                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                  {wishlist.credibility_score || 0}★
+                </Badge>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Posted on {new Date(wishlist.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={
+                wishlist.priority === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                wishlist.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+              }>
+                {wishlist.priority} priority
+              </Badge>
+              <Badge variant="outline" className="capitalize">{wishlist.category.replace('-', ' ')}</Badge>
+            </div>
+          </div>
+
+          {/* Wishlist Details */}
+          <div className="p-4 border rounded-lg mb-4">
+            <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+              <Heart className="w-5 h-5 text-red-500" />
+              {wishlist.item_name}
+            </h3>
+            <p className="text-muted-foreground mb-4">{wishlist.description}</p>
+
+            <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
+              <div>
+                <span className="text-sm text-muted-foreground">Max Price:</span>
+                <p className="font-semibold text-green-600 dark:text-green-400">{wishlist.max_price}</p>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Category:</span>
+                <p className="font-medium capitalize">{wishlist.category.replace('-', ' ')}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg text-sm mb-4">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-red-500">
+                <Heart className="w-4 h-4" />
+                <span className="font-medium">{wishlist.watchers || 0}</span>
+              </div>
+              <span className="text-muted-foreground">Watchers</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-blue-600">
+                <MessageSquare className="w-4 h-4" />
+                <span className="font-medium">{comments.length}</span>
+              </div>
+              <span className="text-muted-foreground">Comments</span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 text-gray-600">
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">{formatDate(wishlist.created_at)}</span>
+              </div>
+              <span className="text-muted-foreground">Posted</span>
+            </div>
+          </div>
+
+          {/* Comments Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">
+                Comments ({comments.length})
+                {loadingComments && <Loader2 className="w-4 h-4 animate-spin inline ml-2" />}
+              </h3>
+            </div>
+
+            {/* Add Comment */}
+            <div className="flex gap-3 p-4 border rounded-lg bg-muted/20">
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                  Y
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 flex gap-2">
+                <Input
+                  placeholder="Add a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAddComment()}
+                  disabled={submittingComment}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || submittingComment}
+                >
+                  {submittingComment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Comments List */}
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {loadingComments ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
+                  <div key={comment.comment_id} className="flex gap-3 p-3 border rounded-lg">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
+                        {comment.username[0]?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">{comment.username}</span>
+                        {comment.credibility_score && (
+                          <Badge variant="secondary" className="text-xs">
+                            {comment.credibility_score}★
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(comment.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{comment.content}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No comments yet. Be the first to comment!</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Wishlist Info */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
+            <div>
+              <span className="text-muted-foreground">Created:</span>
+              <div className="font-medium">{new Date(wishlist.created_at).toLocaleDateString()}</div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Wishlist ID:</span>
+              <div className="font-medium font-mono">{wishlist.wishlist_id.slice(-8)}</div>
+            </div>
+          </div>
+        </DialogBody>
+
+        <DialogFooter>
+          {canEdit ? (
+            <>
+              <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Make Offer
+              </Button>
+              <Button variant="outline" onClick={onEdit}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+              
+              {canDelete && (
+                <Button 
+                  variant="outline" 
+                  onClick={onDelete}
+                  disabled={deleteLoading}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  {deleteLoading ? 'Deleting...' : 'Delete'}
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Make Offer
+              </Button>
+              {canDelete && (
+                <Button 
+                  variant="outline" 
+                  onClick={onDelete}
+                  disabled={deleteLoading}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  {deleteLoading ? 'Deleting...' : 'Delete'}
+                </Button>
+              )}
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function Wishlist() {
+  const { isLoggedIn, isLoading: authLoading } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedWishlist, setSelectedWishlist] = useState<WishlistItem | null>(null);
+  const [editingWishlist, setEditingWishlist] = useState<WishlistItem | null>(null);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [newWishlist, setNewWishlist] = useState({
     itemName: '',
@@ -33,63 +424,13 @@ export function Wishlist() {
     priority: 'medium'
   });
 
-  // Mock wishlist data
-  const wishlistItems = [
-    {
-      id: 1,
-      itemName: 'Dominus Empyreus',
-      description: 'Looking for this rare dominus for my collection. Will pay premium price for good condition.',
-      user: {
-        username: 'DominusHunter',
-        robloxUsername: 'DominusHunter2024',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 5,
-        vouchCount: 67
-      },
-      maxPrice: '75,000 Robux',
-      category: 'limiteds',
-      priority: 'high',
-      timestamp: '2 hours ago',
-      watchers: 15,
-      offers: 3
-    },
-    {
-      id: 2,
-      itemName: 'Valk Helm of the Space Crusader',
-      description: 'Been searching for this for months! Willing to pay above market value.',
-      user: {
-        username: 'ValkCollector',
-        robloxUsername: 'ValkCollector',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 4,
-        vouchCount: 89
-      },
-      maxPrice: '25,000 Robux',
-      category: 'accessories',
-      priority: 'medium',
-      timestamp: '1 day ago',
-      watchers: 8,
-      offers: 1
-    },
-    {
-      id: 3,
-      itemName: 'Zombie Attack Backpack',
-      description: 'Need this for my zombie-themed avatar. Reasonable offers only please.',
-      user: {
-        username: 'ZombieAvatar',
-        robloxUsername: 'ZombieAvatar',
-        avatar: 'https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxyb2Jsb3glMjBhdmF0YXIlMjBjaGFyYWN0ZXJ8ZW58MXx8fHwxNzU4NTYwNDQ4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-        rating: 3,
-        vouchCount: 12
-      },
-      maxPrice: '5,000 Robux',
-      category: 'event-items',
-      priority: 'low',
-      timestamp: '3 days ago',
-      watchers: 4,
-      offers: 0
-    }
-  ];
+  const [editWishlist, setEditWishlist] = useState({
+    itemName: '',
+    description: '',
+    maxPrice: '',
+    category: '',
+    priority: 'medium'
+  });
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -100,18 +441,266 @@ export function Wishlist() {
     { value: 'gamepasses', label: 'Gamepasses' }
   ];
 
-  const handleCreateWishlist = (e: React.FormEvent) => {
+  // Load current user
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const user = await apiService.getCurrentUser();
+        setCurrentUser(user);
+      } catch (err) {
+        console.error('Failed to load current user:', err);
+      }
+    };
+    
+    if (apiService.isAuthenticated()) {
+      loadCurrentUser();
+    }
+  }, []);
+
+  // Load wishlists from API
+  const loadWishlists = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const params: Record<string, string | number> = {
+        page: currentPage,
+        limit: 10
+      };
+      
+      if (filterCategory !== 'all') {
+        params.category = filterCategory;
+      }
+      
+      const response = await apiService.getWishlists(params);
+      
+      // Fix: Handle the response structure properly
+      console.log('Wishlist API response:', response);
+      
+      // Check if response has a wishlists array (based on backend route)
+      if (response && response.wishlists && Array.isArray(response.wishlists)) {
+        setWishlistItems(response.wishlists);
+        
+        // Set pagination if available
+        if (response.pagination) {
+          setTotalPages(response.pagination.pages);
+        }
+      } else if (Array.isArray(response)) {
+        // If response is directly an array
+        setWishlistItems(response);
+      } else {
+        // Fallback to empty array
+        console.warn('Unexpected wishlist response structure:', response);
+        setWishlistItems([]);
+      }
+    } catch (err: unknown) {
+      console.error('Error loading wishlists:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load wishlists');
+      setWishlistItems([]); // Set to empty array on error
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, filterCategory]);
+
+  useEffect(() => {
+    loadWishlists();
+  }, [loadWishlists]);
+
+  // Permission functions
+  const canEditWishlist = (wishlist: WishlistItem) => {
+    return currentUser && currentUser.id === wishlist.user_id;
+  };
+
+  const canDeleteWishlist = (wishlist: WishlistItem) => {
+    if (!currentUser) return false;
+    return currentUser.id === wishlist.user_id || 
+           currentUser.role === 'admin' || 
+           currentUser.role === 'moderator';
+  };
+
+  // Modal functions
+  const handleWishlistClick = (wishlist: WishlistItem) => {
+    setSelectedWishlist(wishlist);
+    setIsDetailsDialogOpen(true);
+  };
+
+  const handleEditFromModal = () => {
+    if (selectedWishlist) {
+      setIsDetailsDialogOpen(false);
+      handleEditWishlist(selectedWishlist);
+    }
+  };
+
+  const handleDeleteFromModal = () => {
+    if (selectedWishlist) {
+      setIsDetailsDialogOpen(false);
+      handleDeleteWishlist(selectedWishlist.wishlist_id, selectedWishlist.item_name);
+    }
+  };
+
+  // CRUD functions
+  const handleCreateWishlist = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock wishlist creation
-    console.log('Creating wishlist item:', newWishlist);
-    setIsCreateDialogOpen(false);
-    setNewWishlist({
-      itemName: '',
-      description: '',
-      maxPrice: '',
-      category: '',
-      priority: 'medium'
+    
+    if (!newWishlist.itemName.trim()) {
+      setError('Item name is required');
+      return;
+    }
+    
+    try {
+      setCreateLoading(true);
+      setError('');
+      
+      await apiService.createWishlist({
+        item_name: newWishlist.itemName,
+        description: newWishlist.description,
+        max_price: newWishlist.maxPrice,
+        category: newWishlist.category,
+        priority: newWishlist.priority as 'high' | 'medium' | 'low'
+      });
+      
+      setIsCreateDialogOpen(false);
+      setNewWishlist({
+        itemName: '',
+        description: '',
+        maxPrice: '',
+        category: '',
+        priority: 'medium'
+      });
+      
+      await loadWishlists();
+      
+      toast.success('Wishlist item created successfully! 🎉', {
+        description: 'Your wishlist item has been added and is now visible to the community.'
+      });
+    } catch (err: unknown) {
+      console.error('Failed to create wishlist item:', err);
+      let errorMessage = 'Failed to create wishlist item';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to create wishlist item', { description: errorMessage });
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleEditWishlist = (wishlist: WishlistItem) => {
+    if (!currentUser || currentUser.id !== wishlist.user_id) {
+      toast.error('You can only edit your own wishlist items');
+      return;
+    }
+    
+    setEditingWishlist(wishlist);
+    setEditWishlist({
+      itemName: wishlist.item_name,
+      description: wishlist.description,
+      maxPrice: wishlist.max_price,
+      category: wishlist.category,
+      priority: wishlist.priority
     });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateWishlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingWishlist) return;
+    
+    if (!editWishlist.itemName.trim()) {
+      setError('Item name is required');
+      return;
+    }
+    
+    try {
+      setEditLoading(true);
+      setError('');
+      
+      await apiService.updateWishlist(editingWishlist.wishlist_id, {
+        item_name: editWishlist.itemName,
+        description: editWishlist.description,
+        max_price: editWishlist.maxPrice,
+        category: editWishlist.category,
+        priority: editWishlist.priority as 'high' | 'medium' | 'low'
+      });
+      
+      setIsEditDialogOpen(false);
+      setEditingWishlist(null);
+      setEditWishlist({
+        itemName: '',
+        description: '',
+        maxPrice: '',
+        category: '',
+        priority: 'medium'
+      });
+      
+      await loadWishlists();
+      
+      toast.success('Wishlist item updated successfully! 🎉', {
+        description: 'Your wishlist item has been updated.'
+      });
+    } catch (err: unknown) {
+      console.error('Failed to update wishlist item:', err);
+      let errorMessage = 'Failed to update wishlist item';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to update wishlist item', { description: errorMessage });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteWishlist = async (wishlistId: string, itemName: string) => {
+    if (!confirm(`Are you sure you want to delete "${itemName}" from your wishlist? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeleteLoading(wishlistId);
+      setError('');
+      
+      await apiService.deleteWishlist(wishlistId);
+      
+      await loadWishlists();
+      
+      toast.success('Wishlist item deleted successfully', {
+        description: 'The item has been removed from your wishlist.'
+      });
+    } catch (err: unknown) {
+      console.error('Failed to delete wishlist item:', err);
+      let errorMessage = 'Failed to delete wishlist item';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (err.message.includes('403')) {
+          errorMessage = 'You do not have permission to delete this item.';
+        } else if (err.message.includes('404')) {
+          errorMessage = 'Item not found. It may have already been deleted.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error('Failed to delete wishlist item', { description: errorMessage });
+    } finally {
+      setDeleteLoading(null);
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -124,10 +713,9 @@ export function Wishlist() {
   };
 
   const filteredItems = wishlistItems.filter(item => {
-    const matchesSearch = item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   return (
@@ -136,7 +724,10 @@ export function Wishlist() {
       <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Community Wishlist</h1>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Heart className="w-7 h-7 text-red-500" />
+              Community Wishlist
+            </h1>
             <p className="text-muted-foreground">See what the community is looking for</p>
           </div>
           
@@ -157,7 +748,7 @@ export function Wishlist() {
               
               <form onSubmit={handleCreateWishlist} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="item-name">Item Name</Label>
+                  <Label htmlFor="item-name">Item Name *</Label>
                   <Input
                     id="item-name"
                     placeholder="Enter the item name"
@@ -205,7 +796,7 @@ export function Wishlist() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="wishlist-category">Category</Label>
+                  <Label htmlFor="wishlist-category">Category *</Label>
                   <Select value={newWishlist.category} onValueChange={(value) => setNewWishlist(prev => ({ ...prev, category: value }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a category" />
@@ -220,12 +811,121 @@ export function Wishlist() {
                   </Select>
                 </div>
                 
+                {error && (
+                  <div className="text-red-500 text-sm">{error}</div>
+                )}
+                
                 <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={createLoading}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white">
-                    Add to Wishlist
+                  <Button type="submit" className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white" disabled={createLoading}>
+                    {createLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Add to Wishlist'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Wishlist Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Edit Wishlist Item</DialogTitle>
+                <DialogDescription>
+                  Update your wishlist item details
+                </DialogDescription>
+              </DialogHeader>
+              
+              <form onSubmit={handleUpdateWishlist} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-name">Item Name *</Label>
+                  <Input
+                    id="edit-item-name"
+                    placeholder="Enter the item name"
+                    value={editWishlist.itemName}
+                    onChange={(e) => setEditWishlist(prev => ({ ...prev, itemName: e.target.value }))}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-description">Description</Label>
+                  <Textarea
+                    id="edit-item-description"
+                    placeholder="Why do you want this item?"
+                    value={editWishlist.description}
+                    onChange={(e) => setEditWishlist(prev => ({ ...prev, description: e.target.value }))}
+                    className="min-h-[80px]"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-max-price">Max Price</Label>
+                    <Input
+                      id="edit-max-price"
+                      placeholder="e.g., 10,000 Robux"
+                      value={editWishlist.maxPrice}
+                      onChange={(e) => setEditWishlist(prev => ({ ...prev, maxPrice: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-priority">Priority</Label>
+                    <Select value={editWishlist.priority} onValueChange={(value) => setEditWishlist(prev => ({ ...prev, priority: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">High Priority</SelectItem>
+                        <SelectItem value="medium">Medium Priority</SelectItem>
+                        <SelectItem value="low">Low Priority</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-wishlist-category">Category *</Label>
+                  <Select value={editWishlist.category} onValueChange={(value) => setEditWishlist(prev => ({ ...prev, category: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(cat => cat.value !== 'all').map(category => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {error && (
+                  <div className="text-red-500 text-sm">{error}</div>
+                )}
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={editLoading}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white" disabled={editLoading}>
+                    {editLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update Wishlist'
+                    )}
                   </Button>
                 </div>
               </form>
@@ -272,40 +972,54 @@ export function Wishlist() {
           </div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-green-500" />
-            <span>89% Match Rate</span>
+            <span>Page {currentPage}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-blue-500" />
-            <span>2.4M Total Value</span>
-          </div>
+          {loading && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+              <span>Loading...</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
-          {filteredItems.map((item) => (
-            <Card key={item.id} className="hover:shadow-lg transition-all duration-200">
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <span className="ml-2">Loading wishlist items...</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="flex items-center justify-center py-12">
+              <AlertCircle className="w-8 h-8 text-red-500 mr-2" />
+              <span className="text-red-500">{error}</span>
+            </div>
+          )}
+          
+          {!loading && !error && filteredItems.map((item) => (
+            <Card 
+              key={item.wishlist_id} 
+              className="hover:shadow-lg transition-all duration-200 cursor-pointer"
+              onClick={() => handleWishlistClick(item)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-12 h-12">
-                      <AvatarImage src={item.user.avatar} />
-                      <AvatarFallback>{item.user.username[0]}</AvatarFallback>
+                      <AvatarFallback>{item.username[0]}</AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{item.user.username}</span>
-                        <div className="flex items-center gap-1">
-                          <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={`w-3 h-3 ${i < item.user.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
-                            ))}
-                          </div>
-                          <span className="text-xs text-muted-foreground">({item.user.vouchCount})</span>
-                        </div>
+                        <span className="font-medium">{item.username}</span>
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                          {item.credibility_score || 0}★
+                        </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">@{item.user.robloxUsername}</p>
+                      <p className="text-sm text-muted-foreground">{formatDate(item.created_at)}</p>
                     </div>
                   </div>
                   
@@ -313,7 +1027,7 @@ export function Wishlist() {
                     <Badge className={getPriorityColor(item.priority)}>
                       {item.priority} priority
                     </Badge>
-                    <Badge variant="outline">{item.category}</Badge>
+                    <Badge variant="outline" className="capitalize">{item.category.replace('-', ' ')}</Badge>
                   </div>
                 </div>
               </CardHeader>
@@ -322,73 +1036,84 @@ export function Wishlist() {
                 <div>
                   <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
                     <Heart className="w-5 h-5 text-red-500" />
-                    {item.itemName}
+                    {item.item_name}
                   </h3>
-                  <p className="text-muted-foreground">{item.description}</p>
+                  <p className="text-muted-foreground line-clamp-2">{item.description}</p>
                 </div>
-
-                {/* Price and Details */}
+                
                 <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <span className="text-sm text-muted-foreground">Max Budget:</span>
-                      <p className="font-semibold text-green-600 dark:text-green-400">{item.maxPrice}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-muted-foreground">Category:</span>
-                      <p className="font-medium capitalize">{item.category.replace('-', ' ')}</p>
-                    </div>
+                  <div>
+                    <span className="text-sm text-muted-foreground">Max Price:</span>
+                    <p className="font-semibold text-green-600 dark:text-green-400">{item.max_price}</p>
                   </div>
                   
-                  <div className="text-right">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Heart className="w-3 h-3" />
-                        <span>{item.watchers} watching</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        <span>{item.offers} offers</span>
-                      </div>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3 h-3" />
+                      <span>{item.watchers || 0} watching</span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{item.timestamp}</span>
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" />
+                      <span>{item.comment_count || 0} comments</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-500">
-                      <Heart className="w-4 h-4 mr-1" />
-                      Watch
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                      <MessageSquare className="w-4 h-4 mr-1" />
-                      Comment
-                    </Button>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white">
-                      Make Offer
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      Contact Seller
-                    </Button>
                   </div>
                 </div>
               </CardContent>
+
+              <CardFooter className="pt-0" onClick={(e) => e.stopPropagation()}>
+                <div className="flex gap-2 w-full">
+                  <Button size="sm" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                    <MessageSquare className="w-3 h-3 mr-1" />
+                    Make Offer
+                  </Button>
+                  
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => handleWishlistClick(item)}
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    View
+                  </Button>
+                  
+                  {canEditWishlist(item) && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleEditWishlist(item)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Edit className="w-3 h-3 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                  
+                  {canDeleteWishlist(item) && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleDeleteWishlist(item.wishlist_id, item.item_name)}
+                      disabled={deleteLoading === item.wishlist_id}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      {deleteLoading === item.wishlist_id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3 mr-1" />
+                      )}
+                      {deleteLoading === item.wishlist_id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  )}
+                </div>
+              </CardFooter>
             </Card>
           ))}
 
-          {filteredItems.length === 0 && (
+          {!loading && !error && filteredItems.length === 0 && (
             <Card className="text-center py-12">
               <CardContent>
                 <div className="text-muted-foreground">
-                  <Heart className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <Heart className="w-12 h-12 mx-auto mb-4 opacity-50 text-red-500" />
                   <h3 className="text-lg font-medium mb-2">No wishlist items found</h3>
                   <p>Try adjusting your search or filter criteria.</p>
                 </div>
@@ -397,6 +1122,18 @@ export function Wishlist() {
           )}
         </div>
       </div>
+
+      {/* Details Modal */}
+      <WishlistDetailsModal
+        wishlist={selectedWishlist}
+        isOpen={isDetailsDialogOpen}
+        onClose={() => setIsDetailsDialogOpen(false)}
+        onEdit={handleEditFromModal}
+        onDelete={handleDeleteFromModal}
+        canEdit={selectedWishlist ? canEditWishlist(selectedWishlist) : false}
+        canDelete={selectedWishlist ? canDeleteWishlist(selectedWishlist) : false}
+        deleteLoading={selectedWishlist ? deleteLoading === selectedWishlist.wishlist_id : false}
+      />
     </div>
   );
 }

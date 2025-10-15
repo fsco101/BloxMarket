@@ -27,6 +27,9 @@ import eventsDatatableRoutes from './routes/datatables/eventsDatatableRoutes.js'
 import forumDatatableRoutes from './routes/datatables/forumDatatableRoutes.js';
 import tradingPostDatatableRoutes from './routes/datatables/tradingPostDatatableRoutes.js';
 
+// Import wishlist routes
+import wishlistRoutes from './routes/wishlist.js';
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -98,13 +101,14 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/admin/datatables', userDatatableRoutes);
+app.use('/api/wishlists', wishlistRoutes); // Add this line
 
 // Admin DataTable Routes
 app.use('/api/admin/datatables/users', userDatatableRoutes);
