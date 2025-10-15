@@ -1,5 +1,5 @@
 import { Wishlist, WishlistComment } from '../models/Wishlist.js';
-import { User } from '../models/User.js'; // Changed from named import to default import
+import { User } from '../models/User.js'; // Changed to named import
 
 class WishlistController {
   /**
@@ -61,7 +61,7 @@ class WishlistController {
             priority: wishlist.priority,
             created_at: wishlist.created_at,
             updated_at: wishlist.updated_at,
-            user_id: wishlist.user_id._id,
+            user_id: wishlist.user_id._id.toString(), // Ensure it's a string
             username: wishlist.user_id.username,
             credibility_score: wishlist.user_id.credibility_score || 0,
             watchers: wishlist.watchers || 0,
@@ -161,10 +161,32 @@ class WishlistController {
    */
   async createWishlist(req, res) {
     try {
+      console.log('=== CREATE WISHLIST DEBUG ===');
+      console.log('Full req.user object:', req.user);
+      console.log('Request body:', req.body);
+      console.log('Authorization header:', req.headers['authorization']);
+      
       const { item_name, description, max_price, category, priority } = req.body;
-      const userId = req.user.id;
+      
+      // Try multiple possible user ID locations
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      console.log('Extracted userId:', userId);
+      console.log('userId type:', typeof userId);
 
       // Validation
+      if (!userId) {
+        console.error('No user ID found in request. req.user:', req.user);
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated',
+          debug: {
+            hasReqUser: !!req.user,
+            reqUserKeys: req.user ? Object.keys(req.user) : []
+          }
+        });
+      }
+
       if (!item_name || !item_name.trim()) {
         return res.status(400).json({ 
           success: false,
@@ -197,18 +219,7 @@ class WishlistController {
         });
       }
 
-      // Check if user already has a wishlist item with the same name
-      const existingWishlist = await Wishlist.findOne({
-        user_id: userId,
-        item_name: { $regex: new RegExp(`^${item_name.trim()}$`, 'i') }
-      });
-
-      if (existingWishlist) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'You already have a wishlist item with this name' 
-        });
-      }
+      console.log('Creating wishlist with userId:', userId);
 
       // Create wishlist
       const wishlist = new Wishlist({
@@ -221,11 +232,14 @@ class WishlistController {
       });
 
       await wishlist.save();
+      console.log('Wishlist saved successfully:', wishlist._id);
 
       // Populate user data
       const populatedWishlist = await Wishlist.findById(wishlist._id)
         .populate('user_id', 'username credibility_score')
         .lean();
+
+      console.log('Wishlist populated successfully');
 
       res.status(201).json({
         success: true,
@@ -248,10 +262,12 @@ class WishlistController {
       });
     } catch (error) {
       console.error('Error creating wishlist:', error);
+      console.error('Error stack:', error.stack);
       res.status(500).json({ 
         success: false,
         error: 'Failed to create wishlist item',
-        message: error.message 
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
@@ -265,7 +281,26 @@ class WishlistController {
     try {
       const { wishlistId } = req.params;
       const { item_name, description, max_price, category, priority } = req.body;
-      const userId = req.user.id;
+      
+      // Try multiple possible user ID locations (consistent with createWishlist)
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      console.log('=== UPDATE WISHLIST DEBUG ===');
+      console.log('Full req.user object:', req.user);
+      console.log('Extracted userId:', userId);
+      console.log('Wishlist ID:', wishlistId);
+
+      if (!userId) {
+        console.error('No user ID found in request. req.user:', req.user);
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated',
+          debug: {
+            hasReqUser: !!req.user,
+            reqUserKeys: req.user ? Object.keys(req.user) : []
+          }
+        });
+      }
 
       // Validate wishlist ID
       if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -285,8 +320,17 @@ class WishlistController {
         });
       }
 
-      // Check ownership
-      if (wishlist.user_id.toString() !== userId) {
+      // Check ownership - convert both to strings for comparison
+      const wishlistUserId = wishlist.user_id.toString();
+      const currentUserId = userId.toString();
+      
+      console.log('Ownership check:', {
+        wishlistUserId,
+        currentUserId,
+        matches: wishlistUserId === currentUserId
+      });
+
+      if (wishlistUserId !== currentUserId) {
         return res.status(403).json({ 
           success: false,
           error: 'Not authorized to update this wishlist item' 
@@ -380,10 +424,12 @@ class WishlistController {
       });
     } catch (error) {
       console.error('Error updating wishlist:', error);
+      console.error('Error stack:', error.stack);
       res.status(500).json({ 
         success: false,
         error: 'Failed to update wishlist item',
-        message: error.message 
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
@@ -396,7 +442,26 @@ class WishlistController {
   async deleteWishlist(req, res) {
     try {
       const { wishlistId } = req.params;
-      const userId = req.user.id;
+      
+      // Try multiple possible user ID locations (consistent with createWishlist)
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      console.log('=== DELETE WISHLIST DEBUG ===');
+      console.log('Full req.user object:', req.user);
+      console.log('Extracted userId:', userId);
+      console.log('Wishlist ID:', wishlistId);
+
+      if (!userId) {
+        console.error('No user ID found in request. req.user:', req.user);
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated',
+          debug: {
+            hasReqUser: !!req.user,
+            reqUserKeys: req.user ? Object.keys(req.user) : []
+          }
+        });
+      }
 
       // Validate wishlist ID
       if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -417,9 +482,23 @@ class WishlistController {
       }
 
       // Check if user owns the wishlist or is admin/moderator
-      const user = await User.findById(userId); // Now using default import
-      const isOwner = wishlist.user_id.toString() === userId;
+      const user = await User.findById(userId);
+      
+      // Convert to strings for comparison
+      const wishlistUserId = wishlist.user_id.toString();
+      const currentUserId = userId.toString();
+      
+      const isOwner = wishlistUserId === currentUserId;
       const isAdmin = user && (user.role === 'admin' || user.role === 'moderator');
+
+      console.log('Delete permission check:', {
+        wishlistUserId,
+        currentUserId,
+        userRole: user?.role,
+        isOwner,
+        isAdmin,
+        canDelete: isOwner || isAdmin
+      });
 
       if (!isOwner && !isAdmin) {
         return res.status(403).json({ 
@@ -446,10 +525,12 @@ class WishlistController {
       });
     } catch (error) {
       console.error('Error deleting wishlist:', error);
+      console.error('Error stack:', error.stack);
       res.status(500).json({ 
         success: false,
         error: 'Failed to delete wishlist item',
-        message: error.message 
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }

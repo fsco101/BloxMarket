@@ -145,8 +145,11 @@ export const authController = {
       // Generate JWT token
       const token = jwt.sign(
         { 
-          userId: user._id.toString(),
+          id: user._id.toString(),           // Add this
+          userId: user._id.toString(),       // Keep this for backward compatibility
+          _id: user._id.toString(),          // Add this too
           username: user.username,
+          email: user.email,
           role: user.role 
         },
         JWT_SECRET,

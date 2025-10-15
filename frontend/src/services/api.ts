@@ -1323,6 +1323,10 @@ class ApiService {
     category: string;
     priority: 'high' | 'medium' | 'low';
   }) {
+    // Add token check
+    const token = localStorage.getItem('token');
+    console.log('Creating wishlist with token:', token ? 'Token exists' : 'No token');
+    
     return this.request('/wishlists', {
       method: 'POST',
       body: JSON.stringify(data)
