@@ -1443,6 +1443,50 @@ class ApiService {
       method: 'DELETE'
     });
   }
+
+  // Admin Wishlist Datatable endpoints
+  async getWishlistsAdmin(params?: Record<string, string | number>) {
+    const queryString = params 
+      ? `?${new URLSearchParams(params as Record<string, string>).toString()}` 
+      : '';
+    return this.request(`/admin/datatables/wishlists${queryString}`);
+  }
+
+  async getWishlistStatistics() {
+    return this.request('/admin/datatables/wishlists/stats/overview');
+  }
+
+  async moderateWishlist(wishlistId: string, action: string, reason?: string) {
+    return this.request(`/admin/datatables/wishlists/${wishlistId}/moderate`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action, reason })
+    });
+  }
+
+  async deleteWishlistAdmin(wishlistId: string) {
+    return this.request(`/admin/datatables/wishlists/${wishlistId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async bulkDeleteWishlists(wishlistIds: string[]) {
+    return this.request('/admin/datatables/wishlists/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ wishlistIds })
+    });
+  }
+
+  async exportWishlistsCSV(params?: Record<string, string>) {
+    const queryString = params 
+      ? `?${new URLSearchParams(params).toString()}` 
+      : '';
+    return this.request(`/admin/datatables/wishlists/export/csv${queryString}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/csv'
+      }
+    });
+  }
 }
 
 export const apiService = new ApiService();

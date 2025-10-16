@@ -83,7 +83,7 @@ interface Event {
 
 interface DashboardPost {
   id: string;
-  type: 'trade' | 'forum' | 'event';
+  type: 'trade' | 'forum' | 'event' | string; // Added string to accommodate potential type mismatches
   title: string;
   description: string;
   user: {
@@ -908,7 +908,9 @@ export function Dashboard() {
                 username: trade.username || 'Unknown User',
                 robloxUsername: trade.roblox_username,
                 rating: Math.min(5, Math.max(1, Math.floor((trade.credibility_score || 0) / 20))),
-                vouchCount: Math.floor((trade.credibility_score || 0) / 2)
+                vouchCount: Math.floor((trade.credibility_score || 0) / 2),
+                verified: false, // Default to false since the trade data doesn't include verification status
+                moderator: false // Default to false since the trade data doesn't include moderator status
               },
               timestamp,
               items: [trade.item_offered],
@@ -957,7 +959,9 @@ export function Dashboard() {
               user: {
                 username: post.username || 'Unknown User',
                 rating: Math.min(5, Math.max(1, Math.floor((post.credibility_score || 0) / 20))),
-                vouchCount: Math.floor((post.credibility_score || 0) / 2)
+                vouchCount: Math.floor((post.credibility_score || 0) / 2),
+                verified: false, // Default to false since the forum post data doesn't include verification status
+                moderator: false // Default to false since the forum post data doesn't include moderator status
               },
               timestamp,
               comments: post.commentCount || 0,
@@ -973,12 +977,38 @@ export function Dashboard() {
         if (eventsData.status === 'fulfilled') {
           // Fix: Extract events array from response object, same as EventsGiveaways
           const eventsArray = eventsData.value.events || eventsData.value || [];
-          activeEventCount = eventsArray.filter((event: any) => 
+          
+          // Define the Event interface to remove any types
+          interface EventData {
+            _id: string;
+            title: string;
+            description?: string;
+            type: 'giveaway' | 'competition' | 'event';
+            status: 'active' | 'ended' | 'upcoming' | 'ending-soon';
+            startDate?: string;
+            endDate?: string;
+            createdAt: string;
+            prizes?: string[];
+            requirements?: string[];
+            maxParticipants?: number;
+            participantCount?: number;
+            creator?: {
+              username: string;
+              avatar?: string;
+              verified?: boolean;
+            };
+            images?: Array<{ filename: string; path: string }>;
+          }
+          
+          // Type cast the events array
+          const typedEventsArray = eventsArray as EventData[];
+          
+          activeEventCount = typedEventsArray.filter(event => 
             event.status === 'active' || event.status === 'upcoming'
           ).length;
           
           // Process events with vote and comment counts like in EventsGiveaways
-          const eventsWithCounts = await Promise.all(eventsArray.map(async (event: any) => {
+          const eventsWithCounts = await Promise.all(typedEventsArray.map(async (event) => {
             try {
               const [voteResponse, commentResponse] = await Promise.allSettled([
                 apiService.getEventVotes(event._id),
@@ -1013,7 +1043,7 @@ export function Dashboard() {
               // Process event images
               let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
               if (event.images && event.images.length > 0) {
-                images = event.images.map((img: any) => ({
+                images = event.images.map((img) => ({
                   url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
                   type: 'forum' as const // Use 'forum' type for events since there's no 'event' type in the union
                 }));
@@ -1065,7 +1095,7 @@ export function Dashboard() {
               // Process event images even if counts fail
               let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
               if (event.images && event.images.length > 0) {
-                images = event.images.map((img: any) => ({
+                images = event.images.map((img) => ({
                   url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
                   type: 'forum' as const
                 }));
@@ -1101,7 +1131,8 @@ export function Dashboard() {
             }
           }));
 
-          allPosts.push(...eventsWithCounts);
+          // Cast the events to DashboardPost before pushing to allPosts
+          allPosts.push(...(eventsWithCounts as DashboardPost[]));
         }
 
         // Sort posts by timestamp

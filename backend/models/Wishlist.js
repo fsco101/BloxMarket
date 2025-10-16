@@ -52,6 +52,22 @@ const wishlistSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  is_visible: {
+    type: Boolean,
+    default: true
+  },
+  is_flagged: {
+    type: Boolean,
+    default: false
+  },
+  flagged_reason: {
+    type: String,
+    default: null
+  },
+  hidden_reason: {
+    type: String,
+    default: null
+  },
   created_at: {
     type: Date,
     default: Date.now

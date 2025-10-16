@@ -215,10 +215,12 @@ export function WishlistManagement() {
         params.priority = filterPriority;
       }
       
-      const response = await apiService.request(`/admin/datatables/wishlists?${new URLSearchParams(params as Record<string, string>).toString()}`);
+      const response = await apiService.getWishlistsAdmin(params);
       
       if (response.wishlists && Array.isArray(response.wishlists)) {
         setWishlists(response.wishlists);
+      } else if (response.data && Array.isArray(response.data)) {
+        setWishlists(response.data);
       }
       
       if (response.pagination) {
@@ -241,7 +243,7 @@ export function WishlistManagement() {
   // Load statistics
   const loadStatistics = useCallback(async () => {
     try {
-      const stats = await apiService.request('/admin/datatables/wishlists/stats/overview');
+      const stats = await apiService.getWishlistStatistics();
       setStatistics(stats);
     } catch (err) {
       console.error('Error loading wishlist statistics:', err);
@@ -333,9 +335,7 @@ export function WishlistManagement() {
     
     try {
       setActionLoading(true);
-      await apiService.request(`/admin/datatables/wishlists/${selectedWishlist.wishlist_id}`, {
-        method: 'DELETE',
-      });
+      await apiService.deleteWishlistAdmin(selectedWishlist.wishlist_id);
       
       // Remove from list
       setWishlists(wishlists.filter(w => w.wishlist_id !== selectedWishlist.wishlist_id));
@@ -364,10 +364,7 @@ export function WishlistManagement() {
     
     try {
       setActionLoading(true);
-      await apiService.request('/admin/datatables/wishlists/bulk-delete', {
-        method: 'POST',
-        body: JSON.stringify({ wishlistIds: selectedWishlists }),
-      });
+      await apiService.bulkDeleteWishlists(selectedWishlists);
       
       // Clear selection
       setSelectedWishlists([]);
@@ -392,13 +389,11 @@ export function WishlistManagement() {
     
     try {
       setActionLoading(true);
-      await apiService.request(`/admin/datatables/wishlists/${selectedWishlist.wishlist_id}/moderate`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          action: moderationAction,
-          reason: moderationReason,
-        }),
-      });
+      await apiService.moderateWishlist(
+        selectedWishlist.wishlist_id,
+        moderationAction,
+        moderationReason
+      );
       
       // Update wishlist in list
       setWishlists(wishlists.map(w => {
@@ -436,22 +431,36 @@ export function WishlistManagement() {
   };
 
   // Export to CSV
-  const handleExportToCsv = () => {
-    let url = `/admin/datatables/wishlists/export/csv`;
-    
-    // Add filters if present
-    const params: Record<string, string> = {};
-    if (filterCategory !== 'all') params.category = filterCategory;
-    if (filterPriority !== 'all') params.priority = filterPriority;
-    
-    if (Object.keys(params).length > 0) {
-      url += `?${new URLSearchParams(params).toString()}`;
+  const handleExportToCsv = async () => {
+    try {
+      // Add filters if present
+      const params: Record<string, string> = {};
+      if (filterCategory !== 'all') params.category = filterCategory;
+      if (filterPriority !== 'all') params.priority = filterPriority;
+      
+      // Use our API service to handle the export
+      const response = await apiService.exportWishlistsCSV(params);
+      
+      // Create a Blob from the response
+      const blob = new Blob([response], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a link and trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wishlists-${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success('Wishlist data exported to CSV');
+    } catch (err) {
+      console.error('Error exporting CSV:', err);
+      toast.error('Failed to export wishlist data');
     }
-    
-    // Make request and download file
-    window.open(`${window.location.protocol}//${window.location.hostname}:5000/api${url}`, '_blank');
-    
-    toast.success('Exporting wishlist data to CSV');
   };
 
   // Get priority color
