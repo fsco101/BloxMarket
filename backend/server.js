@@ -29,6 +29,7 @@ import tradingPostDatatableRoutes from './routes/datatables/tradingPostDatatable
 
 // Import wishlist routes
 import wishlistRoutes from './routes/wishlist.js';
+import wishlistDatatableRoutes from './routes/datatables/wishlistDatatableRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -117,6 +118,7 @@ app.use('/api/admin/datatables/users', userDatatableRoutes);
 app.use('/api/admin/datatables/events', eventsDatatableRoutes);
 app.use('/api/admin/datatables/forum', forumDatatableRoutes);
 app.use('/api/admin/datatables/trading-posts', tradingPostDatatableRoutes);
+app.use('/api/admin/datatables/wishlists', wishlistDatatableRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
