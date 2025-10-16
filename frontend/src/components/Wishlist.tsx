@@ -48,6 +48,7 @@ interface WishlistItem {
   comment_count?: number;
   upvotes?: number;
   downvotes?: number;
+  images?: { filename: string; originalName?: string }[]; // Add this line
 }
 
 interface WishlistComment {
@@ -100,7 +101,7 @@ const formatDate = (dateString: string): string => {
   }
 };
 
-// Enhanced Wishlist Details Modal Component with upvote/downvote and comments
+  // Enhanced Wishlist Details Modal Component with upvote/downvote and comments
 function WishlistDetailsModal({ 
   wishlist, 
   isOpen, 
@@ -119,8 +120,7 @@ function WishlistDetailsModal({
   const [downvotes, setDownvotes] = useState(0);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [votingLoading, setVotingLoading] = useState(false);
-
-  // Load wishlist comments and votes when modal opens
+  const [imageDeleteLoading, setImageDeleteLoading] = useState<string | null>(null);  // Load wishlist comments and votes when modal opens
   useEffect(() => {
     if (isOpen && wishlist) {
       loadWishlistData();
@@ -141,18 +141,28 @@ function WishlistDetailsModal({
       ]);
 
       // Handle comments
-      if (commentsResponse.status === 'fulfilled' && commentsResponse.value?.comments) {
-        setComments(commentsResponse.value.comments);
+      if (commentsResponse.status === 'fulfilled') {
+        console.log('Comments response:', commentsResponse.value);
+        if (commentsResponse.value?.comments && Array.isArray(commentsResponse.value.comments)) {
+          setComments(commentsResponse.value.comments);
+        } else if (Array.isArray(commentsResponse.value)) {
+          // If the response is directly an array of comments
+          setComments(commentsResponse.value);
+        } else {
+          console.warn('Unexpected comments response structure:', commentsResponse.value);
+          setComments([]);
+        }
       } else {
-        console.warn('No comments in response');
+        console.error('Failed to load comments:', commentsResponse.reason);
         setComments([]);
       }
 
       // Handle votes
       if (voteResponse.status === 'fulfilled') {
-        setUpvotes(voteResponse.value.upvotes || 0);
-        setDownvotes(voteResponse.value.downvotes || 0);
-        setUserVote(voteResponse.value.userVote || null);
+        console.log('Votes response:', voteResponse.value);
+        setUpvotes(voteResponse.value?.upvotes || 0);
+        setDownvotes(voteResponse.value?.downvotes || 0);
+        setUserVote(voteResponse.value?.userVote || null);
       } else {
         console.error('Failed to load votes:', voteResponse.reason);
         setUpvotes(wishlist.upvotes || 0);
@@ -232,16 +242,49 @@ function WishlistDetailsModal({
       setSubmittingComment(true);
       console.log('Adding comment to wishlist:', wishlist.wishlist_id);
       
-      const comment = await apiService.addWishlistComment(wishlist.wishlist_id, newComment);
+      const response = await apiService.addWishlistComment(wishlist.wishlist_id, newComment);
       
-      setComments(prev => [comment, ...prev]);
-      setNewComment('');
-      toast.success('Comment added!');
+      // Check if the response has the comment structure we expect
+      if (response && response.content) {
+        setComments(prev => [response, ...prev]);
+        setNewComment('');
+        toast.success('Comment added!');
+      } else {
+        console.error('Invalid comment response:', response);
+        toast.error('Unexpected server response');
+      }
     } catch (error) {
       console.error('Failed to add comment:', error);
       toast.error('Failed to add comment');
     } finally {
       setSubmittingComment(false);
+    }
+  };
+  
+  const handleDeleteImage = async (filename: string) => {
+    if (!wishlist || !canEdit) return;
+    
+    if (!confirm('Are you sure you want to delete this image? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setImageDeleteLoading(filename);
+      console.log('Deleting image:', filename);
+      
+      await apiService.deleteWishlistImage(wishlist.wishlist_id, filename);
+      
+      // Update the wishlist in state
+      if (wishlist.images) {
+        wishlist.images = wishlist.images.filter(img => img.filename !== filename);
+      }
+      
+      toast.success('Image deleted!');
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+      toast.error('Failed to delete image');
+    } finally {
+      setImageDeleteLoading(null);
     }
   };
 
@@ -313,6 +356,49 @@ function WishlistDetailsModal({
               </Button>
             </div>
           </div>
+
+          {/* Images Gallery (if any) */}
+          {wishlist.images && wishlist.images.length > 0 && (
+            <div className="p-4 border rounded-lg">
+              <h3 className="font-semibold mb-3">Images ({wishlist.images.length})</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {wishlist.images.map((image, index) => (
+                  <div key={index} className="relative aspect-square rounded-md overflow-hidden border group">
+                    <img 
+                      src={`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`}
+                      alt={`Item image ${index + 1}`}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      onClick={() => window.open(`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`, '_blank')}
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        console.error('Image failed to load:', image.filename);
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300?text=Image+Not+Found';
+                      }}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-xs text-white px-2 py-1">
+                      Image {index + 1}
+                    </div>
+                    {canEdit && (
+                      <button
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteImage(image.filename);
+                        }}
+                        disabled={imageDeleteLoading === image.filename}
+                      >
+                        {imageDeleteLoading === image.filename ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Wishlist Details */}
           <div className="p-4 border rounded-lg">
@@ -523,7 +609,7 @@ function WishlistDetailsModal({
 }
 
 export function Wishlist() {
-  const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const { isLoggedIn } = useAuth();
 
   // Debug authentication status
   useEffect(() => {
@@ -558,6 +644,8 @@ export function Wishlist() {
     category: '',
     priority: 'medium'
   });
+  
+  const [wishlistImages, setWishlistImages] = useState<File[]>([]);
 
   const [editWishlist, setEditWishlist] = useState({
     itemName: '',
@@ -566,6 +654,8 @@ export function Wishlist() {
     category: '',
     priority: 'medium'
   });
+  
+  const [editWishlistImages, setEditWishlistImages] = useState<File[]>([]);
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -617,7 +707,12 @@ export function Wishlist() {
         
         // Set pagination if available
         if (response.pagination) {
-          setTotalPages(response.pagination.pages);
+          setTotalPages(response.pagination.pages || 1);
+          
+          // Only update current page if response.pagination.page is valid
+          if (response.pagination.page && response.pagination.page > 0) {
+            setCurrentPage(response.pagination.page);
+          }
         }
       } else if (Array.isArray(response)) {
         // If response is directly an array
@@ -736,7 +831,8 @@ export function Wishlist() {
         description: newWishlist.description,
         max_price: newWishlist.maxPrice,
         category: newWishlist.category,
-        priority: newWishlist.priority
+        priority: newWishlist.priority,
+        imagesCount: wishlistImages.length
       });
       
       // Check if token exists
@@ -744,13 +840,28 @@ export function Wishlist() {
         throw new Error('Not authenticated. Please log in again.');
       }
       
-      await apiService.createWishlist({
-        item_name: newWishlist.itemName,
-        description: newWishlist.description,
-        max_price: newWishlist.maxPrice,
-        category: newWishlist.category,
-        priority: newWishlist.priority as 'high' | 'medium' | 'low'
-      });
+      // If we have images, use the createWishlistWithImages method
+      if (wishlistImages.length > 0) {
+        await apiService.createWishlistWithImages(
+          {
+            item_name: newWishlist.itemName,
+            description: newWishlist.description,
+            max_price: newWishlist.maxPrice,
+            category: newWishlist.category,
+            priority: newWishlist.priority as 'high' | 'medium' | 'low'
+          },
+          wishlistImages
+        );
+      } else {
+        // Otherwise use the regular createWishlist method
+        await apiService.createWishlist({
+          item_name: newWishlist.itemName,
+          description: newWishlist.description,
+          max_price: newWishlist.maxPrice,
+          category: newWishlist.category,
+          priority: newWishlist.priority as 'high' | 'medium' | 'low'
+        });
+      }
       
       setIsCreateDialogOpen(false);
       setNewWishlist({
@@ -760,6 +871,7 @@ export function Wishlist() {
         category: '',
         priority: 'medium'
       });
+      setWishlistImages([]);
       
       await loadWishlists();
       
@@ -818,6 +930,7 @@ export function Wishlist() {
       setEditLoading(true);
       setError('');
       
+      // First update the basic wishlist details
       await apiService.updateWishlist(editingWishlist.wishlist_id, {
         item_name: editWishlist.itemName,
         description: editWishlist.description,
@@ -825,6 +938,11 @@ export function Wishlist() {
         category: editWishlist.category,
         priority: editWishlist.priority as 'high' | 'medium' | 'low'
       });
+      
+      // If new images are selected, upload them
+      if (editWishlistImages.length > 0) {
+        await apiService.uploadWishlistImages(editingWishlist.wishlist_id, editWishlistImages);
+      }
       
       setIsEditDialogOpen(false);
       setEditingWishlist(null);
@@ -835,6 +953,7 @@ export function Wishlist() {
         category: '',
         priority: 'medium'
       });
+      setEditWishlistImages([]);
       
       await loadWishlists();
       
@@ -1009,6 +1128,52 @@ export function Wishlist() {
                     </Select>
                   </div>
                   
+                  <div className="space-y-2">
+                    <Label htmlFor="wishlist-images">Images (Max 5)</Label>
+                    <div className="grid gap-2">
+                      <Input
+                        id="wishlist-images"
+                        type="file"
+                        multiple
+                        accept=".jpg,.jpeg,.png,.gif,.webp"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length > 5) {
+                            toast.error('Maximum 5 images allowed');
+                            e.target.value = '';
+                            return;
+                          }
+                          setWishlistImages(files);
+                        }}
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        Supported formats: JPG, PNG, GIF, WebP (max 5MB per image)
+                      </div>
+                      {wishlistImages.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {wishlistImages.map((file, index) => (
+                            <div key={index} className="relative group">
+                              <div className="border rounded-md p-1 bg-muted/30">
+                                <div className="text-xs truncate max-w-[100px]">
+                                  {file.name}
+                                </div>
+                              </div>
+                              <button 
+                                type="button"
+                                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                onClick={() => {
+                                  setWishlistImages(prev => prev.filter((_, i) => i !== index));
+                                }}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
                   {error && (
                     <div className="text-red-500 text-sm">{error}</div>
                   )}
@@ -1116,6 +1281,52 @@ export function Wishlist() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-wishlist-images">Add More Images (Max 5 total)</Label>
+              <div className="grid gap-2">
+                <Input
+                  id="edit-wishlist-images"
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.gif,.webp"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 5) {
+                      toast.error('Maximum 5 images allowed');
+                      e.target.value = '';
+                      return;
+                    }
+                    setEditWishlistImages(files);
+                  }}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Supported formats: JPG, PNG, GIF, WebP (max 5MB per image)
+                </div>
+                {editWishlistImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {editWishlistImages.map((file, index) => (
+                      <div key={index} className="relative group">
+                        <div className="border rounded-md p-1 bg-muted/30">
+                          <div className="text-xs truncate max-w-[100px]">
+                            {file.name}
+                          </div>
+                        </div>
+                        <button 
+                          type="button"
+                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                          onClick={() => {
+                            setEditWishlistImages(prev => prev.filter((_, i) => i !== index));
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             
             {error && (

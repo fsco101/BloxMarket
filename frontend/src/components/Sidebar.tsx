@@ -65,7 +65,8 @@ export function Sidebar() {
   const profileMenuItems = [
     { id: 'profile', label: 'Profile Overview', icon: User },
     { id: 'my-forum-posts', label: 'My Forum Posts', icon: FileText },
-    { id: 'my-trade-posts', label: 'My Trade Posts', icon: Package }
+    { id: 'my-trade-posts', label: 'My Trade Posts', icon: Package },
+    { id: 'my-wishlist', label: 'My Wishlist', icon: Heart }
   ];
 
   const handleAdminMenuClick = (itemId: string) => {

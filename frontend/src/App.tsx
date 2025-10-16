@@ -13,6 +13,7 @@ import { EventsGiveaways } from './components/EventsGiveaways';
 import { apiService } from './services/api';
 import { MyForumPosts } from './components/user/MyForumPosts';
 import { MyTradePosts } from './components/user/MyTradePosts';
+import { MyWishlist } from './components/user/MyWishlist';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -226,6 +227,8 @@ export default function App() {
         return <MyForumPosts />;
       case 'my-trade-posts':
         return <MyTradePosts />;
+      case 'my-wishlist':
+        return <MyWishlist />;
       default:
         return <Dashboard />;
     }

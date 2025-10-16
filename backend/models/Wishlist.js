@@ -33,6 +33,25 @@ const wishlistSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  images: [{
+    filename: {
+      type: String,
+      required: true
+    },
+    originalName: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  upvotes: {
+    type: Number,
+    default: 0
+  },
+  downvotes: {
+    type: Number,
+    default: 0
+  },
   created_at: {
     type: Date,
     default: Date.now
@@ -75,5 +94,32 @@ const wishlistCommentSchema = new mongoose.Schema({
 wishlistCommentSchema.index({ wishlist_id: 1, created_at: -1 });
 wishlistCommentSchema.index({ user_id: 1 });
 
+// Wishlist Vote Schema
+const wishlistVoteSchema = new mongoose.Schema({
+  wishlist_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Wishlist',
+    required: true
+  },
+  user_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  vote_type: {
+    type: String,
+    enum: ['up', 'down'],
+    required: true
+  },
+  created_at: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+wishlistVoteSchema.index({ wishlist_id: 1, user_id: 1 }, { unique: true });
+wishlistVoteSchema.index({ user_id: 1 });
+
 export const Wishlist = mongoose.model('Wishlist', wishlistSchema);
 export const WishlistComment = mongoose.model('WishlistComment', wishlistCommentSchema);
+export const WishlistVote = mongoose.model('WishlistVote', wishlistVoteSchema);

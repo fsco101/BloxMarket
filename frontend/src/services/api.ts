@@ -1354,13 +1354,93 @@ class ApiService {
 
   // Wishlist comments
   async getWishlistComments(wishlistId: string) {
-    return this.request(`/wishlists/${wishlistId}/comments`);
+    try {
+      console.log('Fetching comments for wishlist:', wishlistId);
+      const response = await this.request(`/wishlists/${wishlistId}/comments`);
+      console.log('Comment fetch response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in getWishlistComments:', error);
+      throw error;
+    }
   }
 
   async addWishlistComment(wishlistId: string, content: string) {
-    return this.request(`/wishlists/${wishlistId}/comments`, {
+    try {
+      console.log('Adding comment to wishlist:', wishlistId, 'Content:', content);
+      const token = localStorage.getItem('bloxmarket-token');
+      console.log('Using token:', token ? 'Present' : 'Missing');
+      
+      const response = await this.request(`/wishlists/${wishlistId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content })
+      });
+      
+      console.log('Comment add response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in addWishlistComment:', error);
+      throw error;
+    }
+  }
+
+  // Wishlist votes
+  async getWishlistVotes(wishlistId: string) {
+    return this.request(`/wishlists/${wishlistId}/votes`);
+  }
+
+  async voteWishlist(wishlistId: string, voteType: 'up' | 'down') {
+    return this.request(`/wishlists/${wishlistId}/vote`, {
       method: 'POST',
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ voteType })
+    });
+  }
+
+  // Wishlist images
+  async createWishlistWithImages(data: {
+    item_name: string;
+    description: string;
+    max_price: string;
+    category: string;
+    priority: 'high' | 'medium' | 'low';
+  }, images?: File[]) {
+    const formData = new FormData();
+    
+    // Add wishlist data
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, value.toString());
+      }
+    });
+    
+    // Add images
+    if (images && images.length > 0) {
+      images.forEach(image => {
+        formData.append('images', image);
+      });
+    }
+    
+    return this.request('/wishlists', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async uploadWishlistImages(wishlistId: string, images: File[]) {
+    const formData = new FormData();
+    images.forEach(image => {
+      formData.append('images', image);
+    });
+    
+    return this.request(`/wishlists/${wishlistId}/images`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async deleteWishlistImage(wishlistId: string, filename: string) {
+    return this.request(`/wishlists/${wishlistId}/images/${filename}`, {
+      method: 'DELETE'
     });
   }
 }

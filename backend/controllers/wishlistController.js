@@ -1,5 +1,50 @@
-import { Wishlist, WishlistComment } from '../models/Wishlist.js';
-import { User } from '../models/User.js'; // Changed to named import
+import { Wishlist, WishlistComment, WishlistVote } from '../models/Wishlist.js';
+import { User } from '../models/User.js';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure multer storage for wishlist images
+const wishlistStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = path.join(__dirname, '../uploads/wishlists');
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'wishlist-' + uniqueSuffix + ext);
+  }
+});
+
+// Filter to accept only images
+const imageFilter = function (req, file, cb) {
+  // Accept images only
+  if (!file.originalname.match(/\.(jpg|JPG|jpeg|JPEG|png|PNG|gif|GIF|webp|WEBP)$/)) {
+    req.fileValidationError = 'Only image files are allowed!';
+    return cb(new Error('Only image files are allowed!'), false);
+  }
+  cb(null, true);
+};
+
+// Configure multer upload
+export const wishlistUpload = multer({
+  storage: wishlistStorage,
+  fileFilter: imageFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+    files: 5 // Max 5 files
+  }
+});
 
 class WishlistController {
   /**
@@ -52,6 +97,21 @@ class WishlistController {
             wishlist_id: wishlist._id 
           });
           
+          // Get user's vote if authenticated
+          let userVote = null;
+          const userId = req.user?.id || req.user?.userId || req.user?._id;
+          
+          if (userId) {
+            const vote = await WishlistVote.findOne({
+              wishlist_id: wishlist._id,
+              user_id: userId
+            });
+            
+            if (vote) {
+              userVote = vote.vote_type;
+            }
+          }
+          
           return {
             wishlist_id: wishlist._id,
             item_name: wishlist.item_name,
@@ -65,7 +125,11 @@ class WishlistController {
             username: wishlist.user_id.username,
             credibility_score: wishlist.user_id.credibility_score || 0,
             watchers: wishlist.watchers || 0,
-            comment_count: commentCount
+            comment_count: commentCount,
+            upvotes: wishlist.upvotes || 0,
+            downvotes: wishlist.downvotes || 0,
+            images: wishlist.images || [],
+            userVote: userVote
           };
         })
       );
@@ -126,6 +190,21 @@ class WishlistController {
         wishlist_id: wishlist._id 
       });
 
+      // Get user's vote if authenticated
+      let userVote = null;
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      if (userId) {
+        const vote = await WishlistVote.findOne({
+          wishlist_id: wishlist._id,
+          user_id: userId
+        });
+        
+        if (vote) {
+          userVote = vote.vote_type;
+        }
+      }
+
       res.json({
         success: true,
         wishlist: {
@@ -141,7 +220,11 @@ class WishlistController {
           username: wishlist.user_id.username,
           credibility_score: wishlist.user_id.credibility_score || 0,
           watchers: wishlist.watchers || 0,
-          comment_count: commentCount
+          comment_count: commentCount,
+          upvotes: wishlist.upvotes || 0,
+          downvotes: wishlist.downvotes || 0,
+          images: wishlist.images || [],
+          userVote: userVote
         }
       });
     } catch (error) {
@@ -165,6 +248,7 @@ class WishlistController {
       console.log('Full req.user object:', req.user);
       console.log('Request body:', req.body);
       console.log('Authorization header:', req.headers['authorization']);
+      console.log('Files:', req.files ? req.files.length : 'None');
       
       const { item_name, description, max_price, category, priority } = req.body;
       
@@ -221,6 +305,25 @@ class WishlistController {
 
       console.log('Creating wishlist with userId:', userId);
 
+      // Process uploaded images if any
+      let images = [];
+      if (req.files && req.files.length > 0) {
+        // Maximum of 5 images allowed
+        if (req.files.length > 5) {
+          return res.status(400).json({ 
+            success: false,
+            error: 'Maximum of 5 images allowed per wishlist item' 
+          });
+        }
+        
+        // Format images data
+        images = req.files.map(file => ({
+          filename: file.filename,
+          originalName: file.originalname,
+          uploadedAt: new Date()
+        }));
+      }
+
       // Create wishlist
       const wishlist = new Wishlist({
         user_id: userId,
@@ -228,7 +331,8 @@ class WishlistController {
         description: description?.trim() || '',
         max_price: max_price?.trim() || 'Negotiable',
         category,
-        priority: priority || 'medium'
+        priority: priority || 'medium',
+        images
       });
 
       await wishlist.save();
@@ -601,7 +705,11 @@ class WishlistController {
     try {
       const { wishlistId } = req.params;
       const { content } = req.body;
-      const userId = req.user.id;
+      // Use the userId property from req.user
+      const userId = req.user.userId;
+      
+      console.log('Add wishlist comment - User ID:', userId);
+      console.log('Add wishlist comment - req.user object:', req.user);
 
       // Validate wishlist ID
       if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -717,7 +825,10 @@ class WishlistController {
             username: wishlist.user_id.username,
             credibility_score: wishlist.user_id.credibility_score || 0,
             watchers: wishlist.watchers || 0,
-            comment_count: commentCount
+            comment_count: commentCount,
+            upvotes: wishlist.upvotes || 0,
+            downvotes: wishlist.downvotes || 0,
+            images: wishlist.images || []
           };
         })
       );
@@ -739,6 +850,396 @@ class WishlistController {
       res.status(500).json({ 
         success: false,
         error: 'Failed to fetch user wishlists',
+        message: error.message 
+      });
+    }
+  }
+  
+  /**
+   * Vote on a wishlist (upvote/downvote)
+   * @route POST /api/wishlists/:wishlistId/vote
+   * @access Private
+   */
+  async voteOnWishlist(req, res) {
+    try {
+      const { wishlistId } = req.params;
+      const { voteType } = req.body;
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      console.log('=== VOTE ON WISHLIST DEBUG ===');
+      console.log('Full req.user object:', req.user);
+      console.log('Extracted userId:', userId);
+      console.log('Wishlist ID:', wishlistId);
+      console.log('Vote type:', voteType);
+
+      // Validate user ID
+      if (!userId) {
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated' 
+        });
+      }
+
+      // Validate wishlist ID
+      if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid wishlist ID format' 
+        });
+      }
+
+      // Validate vote type
+      if (!voteType || !['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid vote type. Must be "up" or "down".' 
+        });
+      }
+
+      // Check if wishlist exists
+      const wishlist = await Wishlist.findById(wishlistId);
+      if (!wishlist) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Wishlist item not found' 
+        });
+      }
+
+      // Check if user already voted on this wishlist
+      let userVote = await WishlistVote.findOne({ 
+        wishlist_id: wishlistId, 
+        user_id: userId 
+      });
+
+      // If user hasn't voted, create new vote
+      if (!userVote) {
+        userVote = new WishlistVote({
+          wishlist_id: wishlistId,
+          user_id: userId,
+          vote_type: voteType
+        });
+        
+        // Update upvotes/downvotes count
+        if (voteType === 'up') {
+          wishlist.upvotes = (wishlist.upvotes || 0) + 1;
+        } else {
+          wishlist.downvotes = (wishlist.downvotes || 0) + 1;
+        }
+        
+        await userVote.save();
+        await wishlist.save();
+        
+        return res.json({
+          success: true,
+          message: `${voteType === 'up' ? 'Upvoted' : 'Downvoted'} wishlist item`,
+          userVote: voteType,
+          upvotes: wishlist.upvotes || 0,
+          downvotes: wishlist.downvotes || 0
+        });
+      }
+      
+      // If user clicks on same vote type, remove the vote
+      if (userVote.vote_type === voteType) {
+        // Update upvotes/downvotes count
+        if (voteType === 'up') {
+          wishlist.upvotes = Math.max(0, (wishlist.upvotes || 0) - 1);
+        } else {
+          wishlist.downvotes = Math.max(0, (wishlist.downvotes || 0) - 1);
+        }
+        
+        // Remove the vote
+        await userVote.deleteOne();
+        await wishlist.save();
+        
+        return res.json({
+          success: true,
+          message: 'Vote removed',
+          userVote: null,
+          upvotes: wishlist.upvotes || 0,
+          downvotes: wishlist.downvotes || 0
+        });
+      }
+      
+      // If user changes vote type (up to down or down to up)
+      // First, remove the old vote count
+      if (userVote.vote_type === 'up') {
+        wishlist.upvotes = Math.max(0, (wishlist.upvotes || 0) - 1);
+      } else {
+        wishlist.downvotes = Math.max(0, (wishlist.downvotes || 0) - 1);
+      }
+      
+      // Then add the new vote count
+      if (voteType === 'up') {
+        wishlist.upvotes = (wishlist.upvotes || 0) + 1;
+      } else {
+        wishlist.downvotes = (wishlist.downvotes || 0) + 1;
+      }
+      
+      // Update the vote type
+      userVote.vote_type = voteType;
+      
+      await userVote.save();
+      await wishlist.save();
+      
+      res.json({
+        success: true,
+        message: `Changed vote to ${voteType === 'up' ? 'upvote' : 'downvote'}`,
+        userVote: voteType,
+        upvotes: wishlist.upvotes || 0,
+        downvotes: wishlist.downvotes || 0
+      });
+    } catch (error) {
+      console.error('Error voting on wishlist:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to vote on wishlist item',
+        message: error.message 
+      });
+    }
+  }
+  
+  /**
+   * Get wishlist votes
+   * @route GET /api/wishlists/:wishlistId/votes
+   * @access Public
+   */
+  async getWishlistVotes(req, res) {
+    try {
+      const { wishlistId } = req.params;
+      
+      // Get user ID if authenticated
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      // Validate wishlist ID
+      if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid wishlist ID format' 
+        });
+      }
+
+      // Get wishlist with vote counts
+      const wishlist = await Wishlist.findById(wishlistId);
+      if (!wishlist) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Wishlist item not found' 
+        });
+      }
+      
+      // Get user's vote if authenticated
+      let userVote = null;
+      if (userId) {
+        const vote = await WishlistVote.findOne({
+          wishlist_id: wishlistId,
+          user_id: userId
+        });
+        
+        if (vote) {
+          userVote = vote.vote_type;
+        }
+      }
+      
+      res.json({
+        success: true,
+        upvotes: wishlist.upvotes || 0,
+        downvotes: wishlist.downvotes || 0,
+        userVote: userVote
+      });
+    } catch (error) {
+      console.error('Error getting wishlist votes:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to get wishlist votes',
+        message: error.message 
+      });
+    }
+  }
+  
+  /**
+   * Upload images for wishlist
+   * @route POST /api/wishlists/:wishlistId/images
+   * @access Private
+   */
+  async uploadWishlistImages(req, res) {
+    try {
+      const { wishlistId } = req.params;
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      // Validate user ID
+      if (!userId) {
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated' 
+        });
+      }
+
+      // Validate wishlist ID
+      if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid wishlist ID format' 
+        });
+      }
+      
+      // Get wishlist
+      const wishlist = await Wishlist.findById(wishlistId);
+      if (!wishlist) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Wishlist item not found' 
+        });
+      }
+      
+      // Check ownership
+      const wishlistUserId = wishlist.user_id.toString();
+      const currentUserId = userId.toString();
+      
+      if (wishlistUserId !== currentUserId) {
+        return res.status(403).json({ 
+          success: false,
+          error: 'Not authorized to upload images for this wishlist item' 
+        });
+      }
+      
+      // Check if files exist in request
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'No images uploaded' 
+        });
+      }
+      
+      // Initialize images array if it doesn't exist
+      if (!wishlist.images) {
+        wishlist.images = [];
+      }
+      
+      // Check if wishlist already has 5 or more images
+      if (wishlist.images.length + req.files.length > 5) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Maximum of 5 images allowed per wishlist item' 
+        });
+      }
+      
+      // Add new images to wishlist
+      req.files.forEach(file => {
+        wishlist.images.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          uploadedAt: new Date()
+        });
+      });
+      
+      wishlist.updated_at = new Date();
+      
+      await wishlist.save();
+      
+      res.json({
+        success: true,
+        message: 'Images uploaded successfully',
+        images: wishlist.images
+      });
+    } catch (error) {
+      console.error('Error uploading wishlist images:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to upload images',
+        message: error.message 
+      });
+    }
+  }
+  
+  /**
+   * Delete wishlist image
+   * @route DELETE /api/wishlists/:wishlistId/images/:filename
+   * @access Private
+   */
+  async deleteWishlistImage(req, res) {
+    try {
+      const { wishlistId, filename } = req.params;
+      const userId = req.user?.id || req.user?.userId || req.user?._id;
+      
+      // Validate user ID
+      if (!userId) {
+        return res.status(401).json({ 
+          success: false,
+          error: 'User not authenticated' 
+        });
+      }
+      
+      // Validate wishlist ID
+      if (!wishlistId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid wishlist ID format' 
+        });
+      }
+      
+      // Get wishlist
+      const wishlist = await Wishlist.findById(wishlistId);
+      if (!wishlist) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Wishlist item not found' 
+        });
+      }
+      
+      // Check ownership
+      const wishlistUserId = wishlist.user_id.toString();
+      const currentUserId = userId.toString();
+      
+      if (wishlistUserId !== currentUserId) {
+        return res.status(403).json({ 
+          success: false,
+          error: 'Not authorized to delete images from this wishlist item' 
+        });
+      }
+      
+      // Check if image exists in wishlist
+      const imageIndex = wishlist.images?.findIndex(img => img.filename === filename);
+      if (imageIndex === -1 || imageIndex === undefined) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Image not found in wishlist' 
+        });
+      }
+      
+      // Get the image to delete
+      const imageToDelete = wishlist.images[imageIndex];
+      
+      // Remove image from array
+      wishlist.images.splice(imageIndex, 1);
+      wishlist.updated_at = new Date();
+      
+      // Save wishlist
+      await wishlist.save();
+      
+      // Delete the file from filesystem
+      const imagePath = path.join(__dirname, '../uploads/wishlists', filename);
+      try {
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      } catch (err) {
+        console.error('Error deleting image file:', err);
+        // Continue even if file deletion fails
+      }
+      
+      res.json({
+        success: true,
+        message: 'Image deleted successfully',
+        deleted: {
+          filename: imageToDelete.filename,
+          originalName: imageToDelete.originalName
+        }
+      });
+    } catch (error) {
+      console.error('Error deleting wishlist image:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to delete image',
         message: error.message 
       });
     }

@@ -34,7 +34,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
@@ -58,6 +60,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const uploadsDir = path.join(__dirname, 'uploads');
 const tradesDir = path.join(uploadsDir, 'trades');
 const forumDir = path.join(uploadsDir, 'forum');
+const wishlistsDir = path.join(uploadsDir, 'wishlists');
+const avatarsDir = path.join(uploadsDir, 'avatars');
+const eventDir = path.join(uploadsDir, 'event');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -67,6 +72,15 @@ if (!fs.existsSync(tradesDir)) {
 }
 if (!fs.existsSync(forumDir)) {
   fs.mkdirSync(forumDir, { recursive: true });
+}
+if (!fs.existsSync(wishlistsDir)) {
+  fs.mkdirSync(wishlistsDir, { recursive: true });
+}
+if (!fs.existsSync(avatarsDir)) {
+  fs.mkdirSync(avatarsDir, { recursive: true });
+}
+if (!fs.existsSync(eventDir)) {
+  fs.mkdirSync(eventDir, { recursive: true });
 }
 
 // MongoDB connection
@@ -85,19 +99,7 @@ async function connectToDatabase() {
 // Connect to database
 connectToDatabase();
 
-// Add CORS middleware before your routes (if not already present)
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
+// Remove this custom CORS middleware as we're using the cors package above
 
 // Routes
 app.use('/api/auth', authRoutes);
