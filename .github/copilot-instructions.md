@@ -3,9 +3,10 @@
 ## Project Overview
 
 BloxMarket is a full-stack platform for Roblox trading with these key components:
-- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + Shadcn/UI
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS + Shadcn/UI
 - **Backend**: Node.js + Express + MongoDB (via Mongoose)
 - **Authentication**: JWT-based with token management and role-based access control
+- **Admin Dashboard**: Complete admin management interface with DataTables integration
 
 ## Architecture & Data Flow
 
@@ -19,12 +20,14 @@ BloxMarket is a full-stack platform for Roblox trading with these key components
 - `/backend/controllers/` - Business logic separated by feature
 - `/backend/routes/` - API endpoint definitions
 - `/backend/middleware/auth.js` - JWT authentication middleware
+- `/backend/controllers/datatables/` - DataTables-specific controllers for admin panel
 
 ### Authentication Flow
 1. User registers/logs in via `/api/auth/register` or `/api/auth/login`
 2. Server generates JWT token stored in `localStorage` as `bloxmarket-token`
 3. Token included in Authorization header: `Bearer <token>`
 4. Protected routes use `auth.js` middleware to verify token
+5. Token verification includes checks for token validity, user existence, and account status
 
 ### Data Models
 - **User**: Profile info, auth data, role management (user, admin, moderator, etc.)
@@ -32,6 +35,8 @@ BloxMarket is a full-stack platform for Roblox trading with these key components
 - **Forum**: Community posts and comments
 - **Event**: Platform events and giveaways
 - **Wishlist**: User-created wishlists for desired items
+- **Report**: User-submitted reports for moderation
+- **Vouch**: User reputation system
 
 ## Development Workflows
 
@@ -67,6 +72,7 @@ All API endpoints follow RESTful conventions with:
 - JWT authentication via Authorization header
 - Standard response format: `{ data/message, error? }`
 - Comprehensive error handling with meaningful status codes
+- DataTables-specific endpoints for admin panel at `/api/admin/datatables/{resource}`
 
 ## Code Patterns & Conventions
 
@@ -133,6 +139,7 @@ if (!req.body.requiredField) {
 - Upload images to `/backend/uploads/{section}/`
 - Images accessed via `/uploads/{section}/{filename}`
 - FormData used for multipart/form-data uploads
+- Image processing with Sharp/Jimp for resizing and optimization
 
 ## Common Workflows
 
@@ -142,11 +149,13 @@ if (!req.body.requiredField) {
 3. Define routes in `/backend/routes/`
 4. Implement frontend API methods in `api.ts`
 5. Create React component in `/frontend/src/components/`
+6. Add admin DataTable controller in `/backend/controllers/datatables/` if needed
 
 ### Authentication Flow
 - JWT token stored in localStorage as `bloxmarket-token`
 - `apiService` automatically includes token in requests
 - Protected routes check user roles in middleware
+- Token expiration handled with automatic logout
 
 ### Permission Checking
 ```typescript
@@ -165,11 +174,13 @@ const canEditItem = (item) => {
 - **Authentication errors**: Check token validity and expiration
 - **CORS issues**: Verify FRONTEND_URL in .env matches your frontend URL
 - **MongoDB connection**: Ensure MongoDB is running locally or connection string is correct
+- **Image upload issues**: Check directory permissions and FormData structure
 
 ### Debugging Tips
 - Check browser console for frontend errors
 - Server logs contain detailed backend errors
 - Use API health check endpoint: `GET /api/health`
+- JWT validation issues often appear in auth.js middleware logs
 
 ## Project-Specific Conventions
 
@@ -188,6 +199,12 @@ const canEditItem = (item) => {
 - useState for local state
 - useEffect for side effects and data fetching
 - Proper loading/error states for async operations
+
+### DataTable Integration
+- Admin pages use server-side pagination, sorting, and filtering
+- DataTable endpoints follow pattern: `/api/admin/datatables/{resource}`
+- Export functionality for CSV data export
+- Bulk operations (delete, moderate) supported through dedicated endpoints
 
 ### CRUD Implementations
 All major features (Trading, Forums, Events, Wishlists) follow consistent CRUD patterns with:

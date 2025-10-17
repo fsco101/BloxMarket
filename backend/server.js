@@ -22,6 +22,7 @@ import forumRoutes from './routes/forum.js';
 import eventRoutes from './routes/events.js';
 import adminRoutes from './routes/admin.js';
 import uploadsRoutes from './routes/uploads.js';
+import verificationRoutes from './routes/verification.js';
 import userDatatableRoutes from './routes/datatables/userDatatableRoutes.js';
 import eventsDatatableRoutes from './routes/datatables/eventsDatatableRoutes.js';
 import forumDatatableRoutes from './routes/datatables/forumDatatableRoutes.js';
@@ -64,6 +65,7 @@ const forumDir = path.join(uploadsDir, 'forum');
 const wishlistsDir = path.join(uploadsDir, 'wishlists');
 const avatarsDir = path.join(uploadsDir, 'avatars');
 const eventDir = path.join(uploadsDir, 'event');
+const documentsDir = path.join(uploadsDir, 'documents');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -82,6 +84,9 @@ if (!fs.existsSync(avatarsDir)) {
 }
 if (!fs.existsSync(eventDir)) {
   fs.mkdirSync(eventDir, { recursive: true });
+}
+if (!fs.existsSync(documentsDir)) {
+  fs.mkdirSync(documentsDir, { recursive: true });
 }
 
 // MongoDB connection
@@ -110,6 +115,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/uploads', uploadsRoutes);
+app.use('/api/verification', verificationRoutes);
 app.use('/api/admin/datatables', userDatatableRoutes);
 app.use('/api/wishlists', wishlistRoutes); // Add this line
 

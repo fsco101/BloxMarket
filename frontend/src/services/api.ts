@@ -738,22 +738,112 @@ class ApiService {
     });
   }
 
+  // Verification/Middleman Routes
   async getVerificationRequests() {
-    return this.request('/admin/verification-requests');
+    return this.request('/verification/applications');
   }
 
   async approveVerification(userId: string, type: 'verified' | 'middleman') {
-    return this.request(`/admin/verification/${userId}/approve`, {
-      method: 'PATCH',
-      body: JSON.stringify({ type })
+    return this.request(`/verification/applications/${userId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'approve' })
     });
   }
 
   async rejectVerification(userId: string, reason?: string) {
-    return this.request(`/admin/verification/${userId}/reject`, {
-      method: 'PATCH',
-      body: JSON.stringify({ reason })
+    return this.request(`/verification/applications/${userId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reject', reason })
     });
+  }
+
+  async getMiddlemen() {
+    return this.request('/verification/middlemen');
+  }
+
+  async getApplicationStatus() {
+    return this.request('/verification/my-application');
+  }
+
+  async applyForMiddleman(applicationData: {
+    experience: string;
+    availability: string;
+    why_middleman: string;
+    referral_codes?: string;
+    external_links?: string;
+    preferred_trade_types?: string;
+  }, documents?: File[]) {
+    try {
+      console.log('Preparing application with documents:', documents?.length || 0);
+      
+      const formData = new FormData();
+      
+      // Add application data
+      Object.entries(applicationData).forEach(([key, value]) => {
+        if (value) {
+          console.log(`Adding field ${key}`);
+          formData.append(key, value);
+        }
+      });
+      
+      // Add documents if provided
+      if (documents && documents.length > 0) {
+        documents.forEach((doc) => {
+          console.log(`Adding document: ${doc.name} (${doc.size} bytes)`);
+          formData.append('documents', doc);
+        });
+        
+        // Additional logging to check formData contents
+        console.log('FormData entries:');
+        for (const pair of (formData as any).entries()) {
+          console.log(`- ${pair[0]}: ${pair[1] instanceof File ? `File: ${pair[1].name}` : pair[1]}`);
+        }
+      }
+      
+      // Direct fetch implementation to better handle FormData
+      const url = `${API_BASE_URL}/verification/apply`;
+      const token = this.token || localStorage.getItem('bloxmarket-token');
+      
+      console.log('Submitting to:', url);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type for FormData
+        },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Application submission failed:', response.status, errorText);
+        let errorMessage = 'Failed to submit application';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData && errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (_) {
+          // If we can't parse JSON, use the raw text if it exists
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error in applyForMiddleman:', error);
+      throw error;
+    }
+  }
+  
+  async getDocumentUrl(documentId: string) {
+    return `${API_BASE_URL}/verification/documents/${documentId}`;
   }
 
   // Utility methods

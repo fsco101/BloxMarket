@@ -14,25 +14,50 @@ import {
   Eye, 
   Calendar,
   TrendingUp,
-  Star,
   FileText,
   Loader2,
   Shield
 } from 'lucide-react';
 
-interface VerificationRequest {
+interface Document {
+  _id: string;
+  document_type: string;
+  filename: string;
+  original_filename: string;
+  file_path: string;
+  mime_type: string;
+  file_size: number;
+  description?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+interface User {
   _id: string;
   username: string;
   roblox_username: string;
   email: string;
+  avatar_url?: string;
+  credibility_score?: number;
+}
+
+interface VerificationRequest {
+  _id: string;
+  user_id: User;
+  experience: string;
+  availability: string;
+  why_middleman: string;
+  referral_codes?: string;
+  external_links?: string[];
+  preferred_trade_types?: string[];
+  status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
+  documents: Document[];
   trades: number;
   vouches: number;
   requestType: 'Middleman' | 'Verified Trader';
-  status: 'pending' | 'approved' | 'rejected';
-  documents?: string[];
+  rejection_reason?: string;
   averageRating?: number;
-  credibility_score?: number;
 }
 
 export function MiddlemanVerification() {
@@ -60,10 +85,10 @@ export function MiddlemanVerification() {
     loadVerificationRequests();
   }, []);
 
-  const handleApprove = async (userId: string, type: 'verified' | 'middleman') => {
+  const handleApprove = async (applicationId: string) => {
     try {
-      setActionLoading(userId);
-      await apiService.approveVerification(userId, type);
+      setActionLoading(applicationId);
+      await apiService.approveVerification(applicationId, 'middleman');
       toast.success('Verification approved successfully');
       loadVerificationRequests();
     } catch (error) {
@@ -74,10 +99,10 @@ export function MiddlemanVerification() {
     }
   };
 
-  const handleReject = async (userId: string, reason: string) => {
+  const handleReject = async (applicationId: string, reason: string) => {
     try {
-      setActionLoading(userId);
-      await apiService.rejectVerification(userId, reason);
+      setActionLoading(applicationId);
+      await apiService.rejectVerification(applicationId, reason);
       toast.success('Verification rejected');
       loadVerificationRequests();
       setRejectionReason('');
@@ -89,11 +114,7 @@ export function MiddlemanVerification() {
     }
   };
 
-  const getRequestTypeColor = (type: string) => {
-    return type === 'Middleman' 
-      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-  };
+  // Helper function for status color coding
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -179,56 +200,51 @@ export function MiddlemanVerification() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <Avatar className="w-12 h-12">
-                        <AvatarFallback>{request.username[0]?.toUpperCase()}</AvatarFallback>
+                        <AvatarFallback>{request.user_id.username[0]?.toUpperCase()}</AvatarFallback>
+                        {request.user_id.avatar_url && (
+                          <AvatarImage src={request.user_id.avatar_url} alt={request.user_id.username} />
+                        )}
                       </Avatar>
                       
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{request.username}</h3>
-                          <Badge className={getRequestTypeColor(request.requestType)}>
-                            {request.requestType}
+                          <h3 className="font-semibold">{request.user_id.username}</h3>
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            Middleman Application
                           </Badge>
                           <Badge className={getStatusColor(request.status)}>
                             {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                           </Badge>
                         </div>
                         
-                        <p className="text-sm text-muted-foreground mb-3">@{request.roblox_username}</p>
+                        <p className="text-sm text-muted-foreground mb-3">@{request.user_id.roblox_username}</p>
                         
                         <div className="grid grid-cols-4 gap-4 text-sm mb-3">
                           <div>
-                            <span className="text-muted-foreground">Joined:</span>
+                            <span className="text-muted-foreground">Applied:</span>
                             <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Trades:</span>
-                            <p className="font-medium">{request.trades}</p>
+                            <span className="text-muted-foreground">Experience:</span>
+                            <p className="font-medium">{request.experience ? request.experience.substring(0, 15) + '...' : 'N/A'}</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Vouches:</span>
-                            <p className="font-medium">{request.vouches}</p>
+                            <span className="text-muted-foreground">Availability:</span>
+                            <p className="font-medium">{request.availability ? request.availability.substring(0, 15) + '...' : 'N/A'}</p>
                           </div>
                           <div>
                             <span className="text-muted-foreground">Credibility:</span>
-                            <p className="font-medium">{request.credibility_score || 0}%</p>
+                            <p className="font-medium">{request.user_id.credibility_score || 0}%</p>
                           </div>
                         </div>
                         
-                        {request.averageRating && (
-                          <div className="flex items-center gap-1 text-sm mb-3">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            <span className="font-medium">{request.averageRating.toFixed(1)}</span>
-                            <span className="text-muted-foreground">average rating</span>
-                          </div>
-                        )}
-                        
                         {request.documents && request.documents.length > 0 && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm text-muted-foreground">Documents:</span>
                             {request.documents.map((doc, i) => (
                               <Badge key={i} variant="outline" className="text-xs">
                                 <FileText className="w-3 h-3 mr-1" />
-                                {doc}
+                                {doc.document_type || doc.original_filename || 'Document ' + (i+1)}
                               </Badge>
                             ))}
                           </div>
@@ -254,7 +270,7 @@ export function MiddlemanVerification() {
                           <Button
                             size="sm"
                             className="bg-green-500 hover:bg-green-600 text-white"
-                            onClick={() => handleApprove(request._id, request.requestType === 'Middleman' ? 'middleman' : 'verified')}
+                            onClick={() => handleApprove(request._id)}
                             disabled={actionLoading === request._id}
                           >
                             {actionLoading === request._id ? (
@@ -309,13 +325,16 @@ export function MiddlemanVerification() {
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16">
                   <AvatarFallback className="text-xl">
-                    {selectedRequest.username[0]?.toUpperCase()}
+                    {selectedRequest.user_id.username[0]?.toUpperCase()}
                   </AvatarFallback>
+                  {selectedRequest.user_id.avatar_url && (
+                    <AvatarImage src={selectedRequest.user_id.avatar_url} alt={selectedRequest.user_id.username} />
+                  )}
                 </Avatar>
                 <div>
-                  <h3 className="text-xl font-semibold">{selectedRequest.username}</h3>
-                  <p className="text-muted-foreground">{selectedRequest.email}</p>
-                  <p className="text-blue-600">@{selectedRequest.roblox_username}</p>
+                  <h3 className="text-xl font-semibold">{selectedRequest.user_id.username}</h3>
+                  <p className="text-muted-foreground">{selectedRequest.user_id.email || "Email not available"}</p>
+                  <p className="text-blue-600">@{selectedRequest.user_id.roblox_username}</p>
                 </div>
               </div>
               
@@ -324,57 +343,78 @@ export function MiddlemanVerification() {
                   <h4 className="font-semibold mb-3">Application Details</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Request Type</label>
-                      <div className="mt-1">
-                        <Badge className={getRequestTypeColor(selectedRequest.requestType)}>
-                          {selectedRequest.requestType}
-                        </Badge>
-                      </div>
+                      <label className="text-sm font-medium text-muted-foreground">Why become a middleman?</label>
+                      <p className="text-sm mt-1 border p-2 rounded bg-muted/50">{selectedRequest.why_middleman}</p>
                     </div>
                     
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Application Date</label>
-                      <p className="text-sm">{new Date(selectedRequest.createdAt).toLocaleDateString()}</p>
+                      <label className="text-sm font-medium text-muted-foreground">Experience</label>
+                      <p className="text-sm mt-1 border p-2 rounded bg-muted/50">{selectedRequest.experience}</p>
                     </div>
                     
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Current Status</label>
-                      <div className="mt-1">
-                        <Badge className={getStatusColor(selectedRequest.status)}>
-                          {selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
-                        </Badge>
-                      </div>
+                      <label className="text-sm font-medium text-muted-foreground">Availability</label>
+                      <p className="text-sm mt-1 border p-2 rounded bg-muted/50">{selectedRequest.availability}</p>
                     </div>
+                    
+                    {selectedRequest.preferred_trade_types && selectedRequest.preferred_trade_types.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Preferred Trade Types</label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedRequest.preferred_trade_types.map((type, i) => (
+                            <Badge key={i} variant="outline">
+                              {type}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedRequest.external_links && selectedRequest.external_links.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">External Links</label>
+                        <div className="flex flex-col gap-1 mt-1">
+                          {selectedRequest.external_links.map((link, i) => (
+                            <a 
+                              key={i} 
+                              href={link.startsWith('http') ? link : `https://${link}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline"
+                            >
+                              {link}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
                 <div>
-                  <h4 className="font-semibold mb-3">Trading Statistics</h4>
+                  <h4 className="font-semibold mb-3">Applicant Information</h4>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Total Trades</span>
-                      <span className="font-medium">{selectedRequest.trades}</span>
+                      <span className="text-sm text-muted-foreground">Application Date</span>
+                      <span className="font-medium">{new Date(selectedRequest.createdAt).toLocaleDateString()}</span>
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Vouches Received</span>
-                      <span className="font-medium">{selectedRequest.vouches}</span>
+                      <span className="text-sm text-muted-foreground">Status</span>
+                      <Badge className={getStatusColor(selectedRequest.status)}>
+                        {selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
+                      </Badge>
                     </div>
                     
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Credibility Score</span>
-                      <span className="font-medium">{selectedRequest.credibility_score || 0}%</span>
+                      <span className="font-medium">{selectedRequest.user_id.credibility_score || 0}%</span>
                     </div>
                     
-                    {selectedRequest.averageRating && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Average Rating</span>
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium">{selectedRequest.averageRating.toFixed(1)}</span>
-                        </div>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Documents Submitted</span>
+                      <span className="font-medium">{selectedRequest.documents?.length || 0}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -386,8 +426,33 @@ export function MiddlemanVerification() {
                     {selectedRequest.documents.map((doc, i) => (
                       <Badge key={i} variant="outline" className="flex items-center gap-1">
                         <FileText className="w-3 h-3" />
-                        {doc}
+                        {doc.document_type || doc.original_filename || `Document ${i+1}`}
                       </Badge>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    {selectedRequest.documents.map((doc, i) => (
+                      <div key={i} className="border rounded-md p-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">{doc.document_type || 'Document'}</span>
+                          <Badge className={doc.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {doc.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="w-3 h-3" />
+                          <span>{doc.original_filename}</span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="mt-2 text-xs h-7 w-full"
+                          onClick={() => window.open(`http://localhost:5000/api/verification/documents/${doc._id}`, '_blank')}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View Document
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -398,7 +463,7 @@ export function MiddlemanVerification() {
                   <Button
                     className="bg-green-500 hover:bg-green-600 text-white"
                     onClick={() => {
-                      handleApprove(selectedRequest._id, selectedRequest.requestType === 'Middleman' ? 'middleman' : 'verified');
+                      handleApprove(selectedRequest._id);
                       setIsViewDialogOpen(false);
                     }}
                     disabled={actionLoading === selectedRequest._id}
