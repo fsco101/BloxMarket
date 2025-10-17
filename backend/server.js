@@ -1,6 +1,13 @@
 // Load env FIRST (move to the very top, before any other imports)
 import 'dotenv/config';
 
+// Log environment settings
+console.log('Environment variables loaded:');
+console.log(`- JWT_EXPIRES_IN: ${process.env.JWT_EXPIRES_IN || 'not set'}`);
+console.log(`- JWT_SECRET: ${process.env.JWT_SECRET ? '[MASKED]' : 'not set'}`);
+console.log(`- NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+console.log(`- PORT: ${process.env.PORT || 'not set'}`);
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

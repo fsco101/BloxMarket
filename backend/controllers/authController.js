@@ -2,8 +2,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+// Dynamically read from environment at runtime to ensure correct value
+const getJwtConfig = () => ({
+  secret: process.env.JWT_SECRET?.trim() || 'your-secret-key',
+  expiresIn: process.env.JWT_EXPIRES_IN?.trim() || '30d'
+});
 
 export const authController = {
   // Register new user
@@ -55,14 +58,16 @@ export const authController = {
       await user.save();
 
       // Generate JWT token
+      const { secret, expiresIn } = getJwtConfig();
+      console.log(`Generating JWT token with expiration: ${expiresIn}`);
       const token = jwt.sign(
         { 
           userId: user._id.toString(),
           username: user.username,
           role: user.role 
         },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
+        secret,
+        { expiresIn }
       );
 
       // Add token to user's tokens array
@@ -143,6 +148,8 @@ export const authController = {
       }
 
       // Generate JWT token
+      const { secret, expiresIn } = getJwtConfig();
+      console.log(`Generating JWT token with expiration: ${expiresIn}`);
       const token = jwt.sign(
         { 
           id: user._id.toString(),           // Add this
@@ -152,8 +159,8 @@ export const authController = {
           email: user.email,
           role: user.role 
         },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
+        secret,
+        { expiresIn }
       );
 
       // Add token to user's tokens array

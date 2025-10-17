@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+// Dynamically read JWT secret at runtime
+const getJwtSecret = () => process.env.JWT_SECRET?.trim() || 'your-secret-key';
 
 export const authenticateToken = async (req, res, next) => {
   try {
@@ -15,7 +16,7 @@ export const authenticateToken = async (req, res, next) => {
     let decoded;
     try {
       // Read the secret at runtime (after dotenv has loaded)
-      const secret = (process.env.JWT_SECRET || 'your-secret-key').trim();
+      const secret = getJwtSecret();
       decoded = jwt.verify(token, secret);
     } catch (jwtError) {
       console.log('JWT verification error:', jwtError.name, jwtError.message);

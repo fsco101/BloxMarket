@@ -124,32 +124,45 @@ export function TradingPostManagement() {
       setTotalPages(response.pagination?.totalPages || 1);
       
       // Initialize DataTable if jQuery is ready
-      if (jQueryReady && !isInitialized.current) {
+      if (jQueryReady) {
+        console.log('jQuery ready, initializing or updating DataTable');
+        
+        // Always initialize/reinitialize the DataTable to ensure proper rendering
         setTimeout(() => {
-          initializeDataTable(response.posts);
-        }, 200);
-      } else if (jQueryReady && dataTableRef.current) {
-        // Update existing DataTable
-        try {
-          dataTableRef.current.clear();
-          dataTableRef.current.rows.add(response.posts);
-          dataTableRef.current.draw();
-        } catch (err) {
-          console.error('Error updating DataTable:', err);
-        }
+          if (tableRef.current) {
+            console.log('Table ref available, initializing DataTable');
+            initializeDataTable(response.posts);
+          } else {
+            console.warn('Table ref not available yet, delaying initialization');
+            // Try again after a longer delay if table ref isn't available yet
+            setTimeout(() => {
+              if (tableRef.current) {
+                initializeDataTable(response.posts);
+              } else {
+                console.error('Table ref still not available after delay');
+              }
+            }, 500);
+          }
+        }, 100);
+      } else {
+        console.warn('jQuery not ready, skipping DataTable initialization');
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading trading posts:', error);
       
       let errorMessage = 'Failed to load trading posts';
       
-      if (error.response?.status === 403) {
-        errorMessage = 'Access denied. Admin or moderator privileges required.';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Authentication required. Please log in again.';
-      } else if (error.message) {
+      if (error instanceof Error) {
         errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Try to handle API error responses
+        const apiError = error as { response?: { status?: number } };
+        if (apiError.response?.status === 403) {
+          errorMessage = 'Access denied. Admin or moderator privileges required.';
+        } else if (apiError.response?.status === 401) {
+          errorMessage = 'Authentication required. Please log in again.';
+        }
       }
       
       toast.error(errorMessage);
@@ -165,39 +178,158 @@ export function TradingPostManagement() {
       return;
     }
 
-    if (!tableRef.current) {
-      console.error('Table ref not available');
-      return;
-    }
-
-    const $ = window.$;
-    
-    try {
-      if (dataTableRef.current) {
-        dataTableRef.current.destroy();
+    // Use a slight delay to ensure DOM is ready
+    setTimeout(() => {
+      if (!tableRef.current) {
+        console.error('Table ref not available');
+        return;
       }
 
-      dataTableRef.current = $(tableRef.current).DataTable({
-        data: postData,
-        destroy: true,
-        responsive: true,
-        pageLength: 25,
-        order: [[0, 'desc']],
-        columns: [
-          { title: 'Post', data: 'title' },
-          { title: 'Author', data: 'author.username' },
-          { title: 'Type', data: 'type' },
-          { title: 'Price', data: 'price' },
-          { title: 'Status', data: 'status' },
-          { title: 'Created', data: 'createdAt' },
-          { title: 'Actions', data: null, orderable: false }
-        ]
-      });
+      const $ = window.$;
+      
+      try {
+        // Clean up existing DataTable and event handlers if they exist
+        if (dataTableRef.current) {
+          // Remove event listeners first
+          $(tableRef.current).off('click', '.view-btn');
+          $(tableRef.current).off('click', '.archive-btn');
+          $(tableRef.current).off('click', '.delete-btn');
+          
+          // Destroy the DataTable instance
+          dataTableRef.current.destroy();
+          $(tableRef.current).empty();
+        }
 
-      isInitialized.current = true;
-    } catch (error) {
-      console.error('Error initializing DataTable:', error);
-    }
+        console.log('Initializing DataTable with', postData.length, 'rows');
+        
+        // Create headers and minimal structure if needed
+        if ($(tableRef.current).find('thead').length === 0) {
+          $(tableRef.current).html(`
+            <thead>
+              <tr>
+                <th>Post</th>
+                <th>Author</th>
+                <th>Type</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          `);
+        }
+
+        // Initialize DataTable
+        dataTableRef.current = $(tableRef.current).DataTable({
+          data: postData,
+          destroy: true,
+          responsive: true,
+          pageLength: 25,
+          order: [[5, 'desc']], // Order by created date desc
+          columns: [
+            { 
+              title: 'Post', 
+              data: 'title',
+              render: function(data: string, _type: string, row: TradingPost) {
+                return `<div class="fw-bold">${data}</div><div class="text-muted small">${row.item_name}</div>`;
+              }
+            },
+            { 
+              title: 'Author', 
+              data: 'author.username',
+              render: function(data: string) {
+                return data;
+              }
+            },
+            { 
+              title: 'Type', 
+              data: 'type',
+              render: function(data: string) {
+                return data.toUpperCase();
+              }
+            },
+            { 
+              title: 'Price', 
+              data: 'price',
+              render: function(data: number | undefined) {
+                return data ? '$' + data.toLocaleString() : '-';
+              }
+            },
+            { 
+              title: 'Status', 
+              data: 'status',
+              render: function(data: string) {
+                return data.charAt(0).toUpperCase() + data.slice(1);
+              }
+            },
+            { 
+              title: 'Created', 
+              data: 'createdAt',
+              render: function(data: string) {
+                return new Date(data).toLocaleDateString();
+              }
+            },
+            { 
+              title: 'Actions', 
+              data: null, 
+              orderable: false,
+              render: function(_data: null, _type: string, row: TradingPost) {
+                return `
+                  <div class="flex items-center gap-2">
+                    <button class="view-btn px-2 py-1 bg-blue-100 text-blue-800 rounded" data-id="${row._id}">
+                      <span class="sr-only">View</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    </button>
+                    <button class="archive-btn px-2 py-1 bg-gray-100 text-gray-800 rounded" data-id="${row._id}">
+                      <span class="sr-only">Archive</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="20" height="5" x="2" y="3" rx="1"></rect><rect width="20" height="5" x="2" y="16" rx="1"></rect><path d="M12 9v7"></path><path d="m9 13 3 3 3-3"></path></svg>
+                    </button>
+                    <button class="delete-btn px-2 py-1 bg-red-100 text-red-800 rounded" data-id="${row._id}">
+                      <span class="sr-only">Delete</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
+                    </button>
+                  </div>
+                `;
+              }
+            }
+          ]
+        });
+
+        // Add event listeners for action buttons
+        $(tableRef.current).on('click', '.view-btn', function(this: HTMLElement) {
+          const id = $(this).data('id') as string;
+          const post = postData.find(p => p._id === id);
+          if (post) {
+            setSelectedPost(post);
+            setIsViewDialogOpen(true);
+          }
+        });
+
+        $(tableRef.current).on('click', '.archive-btn', function(this: HTMLElement) {
+          const id = $(this).data('id') as string;
+          handlePostAction(id, 'archive');
+        });
+
+        $(tableRef.current).on('click', '.delete-btn', function(this: HTMLElement) {
+          const id = $(this).data('id') as string;
+          handlePostAction(id, 'delete');
+        });
+
+        isInitialized.current = true;
+        console.log('DataTable initialized successfully');
+      } catch (error: unknown) {
+        console.error('Error initializing DataTable:', error);
+        
+        let errorMessage = 'Failed to initialize DataTable';
+        
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        
+        toast.error(errorMessage);
+      }
+    }, 100); // Short delay to ensure DOM is ready
   };
 
   // Load posts when component mounts and when filters change
@@ -223,6 +355,7 @@ export function TradingPostManagement() {
         }
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jQueryReady, page, typeFilter, statusFilter]);
 
   // Debounced search
@@ -234,9 +367,14 @@ export function TradingPostManagement() {
     }, 300);
 
     return () => clearTimeout(delayedLoad);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
-  const handlePostAction = async (postId: string, action: string, data?: any) => {
+  interface ModerateActionData {
+    reason?: string;
+  }
+  
+  const handlePostAction = async (postId: string, action: string, data?: ModerateActionData) => {
     try {
       setActionLoading(postId);
       
@@ -248,9 +386,21 @@ export function TradingPostManagement() {
       
       toast.success(`Trading post ${action}ed successfully`);
       loadTradingPosts();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Error ${action}ing trading post:`, error);
-      toast.error(`Failed to ${action} trading post`);
+      
+      let errorMessage = `Failed to ${action} trading post`;
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        const apiError = error as { response?: { status?: number, data?: { error?: string } } };
+        if (apiError.response?.data?.error) {
+          errorMessage = apiError.response.data.error;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }
@@ -421,7 +571,7 @@ export function TradingPostManagement() {
             </div>
           ) : filteredPosts.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table ref={tableRef} className="w-full">
                 <thead className="border-b">
                   <tr className="text-left">
                     <th className="p-4 font-medium">Post</th>
