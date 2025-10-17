@@ -7,23 +7,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Switch } from './ui/switch';
+import { Checkbox } from './ui/checkbox';
 import { Alert, AlertDescription } from './ui/alert';
-import { Upload, Moon, Sun, Loader2 } from 'lucide-react';
+import { Upload, Moon, Sun, Loader2, Eye, EyeOff } from 'lucide-react';
 import { apiService } from '../services/api';
 
 export function AuthPage() {
   const { login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' }); // Keep as username
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [registerForm, setRegisterForm] = useState({
     username: '',
     email: '',
     password: '',
+    confirmPassword: '',
     robloxUsername: '',
+    messengerLink: '',
     avatar: ''
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState({ login: false, register: false });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,23 +53,31 @@ export function AuthPage() {
       const response = await apiService.login({
         username: username,
         password: password
-      });
+      }, rememberMe);
 
       // Ensure token is persisted and ApiService has it
       if (response.token) {
-        apiService.setToken(response.token);
-        localStorage.setItem('bloxmarket-token', response.token);
-        localStorage.setItem('bloxmarket-user', JSON.stringify(response.user));
+        // Use the updated setToken method that handles storage based on rememberMe
+        apiService.setToken(response.token, rememberMe);
+        
+        // Store user data in the same storage as the token
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem('bloxmarket-user', JSON.stringify(response.user));
+        
+        // Clean up the other storage to prevent conflicts
+        const otherStorage = rememberMe ? sessionStorage : localStorage;
+        otherStorage.removeItem('bloxmarket-token');
+        otherStorage.removeItem('bloxmarket-user');
       }
 
-      // Login successful, update auth context
-      login(response.user);
-    } catch (error: any) {
+      // Login successful, update auth context with rememberMe preference
+      login(response.user, rememberMe);
+    } catch (error: unknown) {
       console.error('Login error:', error);
       
       let errorMessage = 'Login failed. Please check your credentials.';
       
-      if (error?.message) {
+      if (error instanceof Error) {
         // Handle specific error messages from the backend
         if (error.message.includes('banned')) {
           errorMessage = 'Your account has been banned. Please contact support.';
@@ -88,20 +101,49 @@ export function AuthPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Validate form fields
+    if (registerForm.username.trim().length < 3) {
+      setError('Username must be at least 3 characters long.');
+      return;
+    }
+    
+    if (!registerForm.email.includes('@') || !registerForm.email.includes('.')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (registerForm.password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError('Passwords do not match. Please try again.');
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
       const response = await apiService.register({
-        username: registerForm.username,
-        email: registerForm.email,
+        username: registerForm.username.trim(),
+        email: registerForm.email.trim(),
         password: registerForm.password,
-        robloxUsername: registerForm.robloxUsername || undefined
+        robloxUsername: registerForm.robloxUsername.trim() || undefined,
+        messengerLink: registerForm.messengerLink.trim() || undefined
       });
       
       // Registration successful, update auth context
-      login(response.user);
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Registration failed. Please try again.';
+      // Default to rememberMe=true for new registrations
+      login(response.user, true);
+    } catch (error: unknown) {
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -171,17 +213,46 @@ export function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                      disabled={isLoading}
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        name="password"
+                        type={showPassword.login ? "text" : "password"}
+                        placeholder="Enter your password"
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                        disabled={isLoading}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500"
+                        onClick={() => setShowPassword(prev => ({ ...prev, login: !prev.login }))}
+                        tabIndex={-1}
+                      >
+                        {showPassword.login ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
+                  
+                  <div className="flex items-center space-x-2 py-2">
+                    <Checkbox 
+                      id="remember-me" 
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(checked === true)}
+                    />
+                    <Label 
+                      htmlFor="remember-me" 
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Remember me for 30 days
+                    </Label>
+                  </div>
+                  
                   <Button 
                     type="submit" 
                     className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
@@ -196,6 +267,12 @@ export function AuthPage() {
                       'Sign In'
                     )}
                   </Button>
+                  
+                  <div className="text-center mt-4">
+                    <a href="#" className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                      Forgot your password?
+                    </a>
+                  </div>
                 </form>
               </CardContent>
             </TabsContent>
@@ -280,19 +357,87 @@ export function AuthPage() {
                       Link your Roblox account for verification
                     </p>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="messenger-link">Messenger Link</Label>
+                    <Input
+                      id="messenger-link"
+                      type="text"
+                      placeholder="Your messenger profile link (optional)"
+                      value={registerForm.messengerLink}
+                      onChange={(e) => setRegisterForm(prev => ({ ...prev, messengerLink: e.target.value }))}
+                      disabled={isLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Add your messenger contact for easier communication
+                    </p>
+                  </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="reg-password">Password</Label>
-                    <Input
-                      id="reg-password"
-                      type="password"
-                      placeholder="Create a password (min. 6 characters)"
-                      value={registerForm.password}
-                      onChange={(e) => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
-                      disabled={isLoading}
-                      required
-                      minLength={6}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="reg-password"
+                        type={showPassword.register ? "text" : "password"}
+                        placeholder="Create a password (min. 6 characters)"
+                        value={registerForm.password}
+                        onChange={(e) => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
+                        disabled={isLoading}
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500"
+                        onClick={() => setShowPassword(prev => ({ ...prev, register: !prev.register }))}
+                        tabIndex={-1}
+                      >
+                        {showPassword.register ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    <div className="h-1 w-full bg-gray-200 dark:bg-gray-700 mt-2 rounded">
+                      <div 
+                        className={`h-full rounded ${
+                          registerForm.password.length === 0 ? 'w-0' :
+                          registerForm.password.length < 6 ? 'w-1/4 bg-red-500' :
+                          registerForm.password.length < 8 ? 'w-2/4 bg-yellow-500' :
+                          registerForm.password.length < 10 ? 'w-3/4 bg-blue-500' :
+                          'w-full bg-green-500'
+                        }`}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {registerForm.password.length === 0 ? 'Password strength indicator' :
+                       registerForm.password.length < 6 ? 'Very weak - Use at least 6 characters' :
+                       registerForm.password.length < 8 ? 'Weak - Consider using a longer password' :
+                       registerForm.password.length < 10 ? 'Good - Password has decent length' :
+                       'Strong - Great password length'}
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirm Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showPassword.register ? "text" : "password"}
+                        placeholder="Re-enter your password"
+                        value={registerForm.confirmPassword}
+                        onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
+                    {registerForm.password && registerForm.confirmPassword && 
+                     registerForm.password !== registerForm.confirmPassword && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Passwords do not match
+                      </p>
+                    )}
                   </div>
                   
                   <Button 

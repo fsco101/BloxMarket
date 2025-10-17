@@ -5,8 +5,8 @@ class ApiService {
   private verifyingOnce = false;
 
   constructor() {
-    // Always try to get the most current token from localStorage
-    this.token = localStorage.getItem('bloxmarket-token');
+    // Try to get the token from either localStorage or sessionStorage
+    this.token = localStorage.getItem('bloxmarket-token') || sessionStorage.getItem('bloxmarket-token');
     console.log('ApiService initialized with token:', this.token ? 'present' : 'missing');
   }
 
@@ -28,7 +28,10 @@ class ApiService {
 
   async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
-    const currentToken = localStorage.getItem('bloxmarket-token') || this.token || null;
+    // Check both storage types for the token
+    const currentToken = localStorage.getItem('bloxmarket-token') || 
+                          sessionStorage.getItem('bloxmarket-token') || 
+                          this.token || null;
 
     const config: RequestInit = {
       // Important: spread options first so our merged headers don't get overwritten by options.headers
@@ -86,15 +89,22 @@ class ApiService {
   }
 
   // Auth methods
-  async login(credentials: { username: string; password: string }) {
+  async login(credentials: { username: string; password: string }, rememberMe: boolean = true) {
     const data = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
     if (data?.token) {
-      this.setToken(data.token);
-      // Optional: persist user for faster UX on reload
-      localStorage.setItem('bloxmarket-user', JSON.stringify(data.user));
+      // Use the rememberMe parameter to determine storage type
+      this.setToken(data.token, rememberMe);
+      
+      // Store user data in the same storage type
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('bloxmarket-user', JSON.stringify(data.user));
+      
+      // Clean up the other storage to avoid conflicts
+      const otherStorage = rememberMe ? sessionStorage : localStorage;
+      otherStorage.removeItem('bloxmarket-user');
     }
     return data;
   }
@@ -104,13 +114,15 @@ class ApiService {
     email: string;
     password: string;
     robloxUsername?: string;
+    messengerLink?: string;
   }) {
     const data = await this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
     if (data?.token) {
-      this.setToken(data.token);
+      // For new registrations, default to persistent login (rememberMe = true)
+      this.setToken(data.token, true);
       localStorage.setItem('bloxmarket-user', JSON.stringify(data.user));
     }
     return data;
@@ -847,15 +859,27 @@ class ApiService {
   }
 
   // Utility methods
-  setToken(token: string) {
+  setToken(token: string, rememberMe: boolean = true) {
     this.token = token;
-    localStorage.setItem('bloxmarket-token', token);
-    console.log('Token set in ApiService');
+    
+    // Store in the appropriate storage based on remember me preference
+    if (rememberMe) {
+      localStorage.setItem('bloxmarket-token', token);
+      // Clean up any token in session storage to avoid confusion
+      sessionStorage.removeItem('bloxmarket-token');
+    } else {
+      sessionStorage.setItem('bloxmarket-token', token);
+      // Clean up any token in local storage to avoid confusion
+      localStorage.removeItem('bloxmarket-token');
+    }
+    
+    console.log(`Token set in ApiService (${rememberMe ? 'persistent' : 'session'} storage)`);
   }
 
   clearToken() {
     this.token = null;
     localStorage.removeItem('bloxmarket-token');
+    sessionStorage.removeItem('bloxmarket-token');
     console.log('Token cleared from ApiService');
   }
 

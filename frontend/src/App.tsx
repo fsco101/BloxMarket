@@ -91,7 +91,7 @@ interface User {
 
 const AuthContext = createContext<{
   user: User | null;
-  login: (userData: User) => void;
+  login: (userData: User, rememberMe?: boolean) => void;
   logout: () => void;
   isLoggedIn: boolean;
   isLoading: boolean;
@@ -125,11 +125,22 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('bloxmarket-token');
-      const storedUser = localStorage.getItem('bloxmarket-user');
+      // Check both storage types for tokens and user data
+      const localToken = localStorage.getItem('bloxmarket-token');
+      const sessionToken = sessionStorage.getItem('bloxmarket-token');
+      const token = localToken || sessionToken;
+      
+      const localUser = localStorage.getItem('bloxmarket-user');
+      const sessionUser = sessionStorage.getItem('bloxmarket-user');
+      const storedUser = localUser || sessionUser;
+      
+      // Determine which storage to use for later operations
+      const isPersistentLogin = !!localToken;
 
       if (token) {
-        apiService.setToken(token);
+        // Set token using the appropriate storage type
+        const isPersistentLogin = !!localToken;
+        apiService.setToken(token, isPersistentLogin);
 
         if (storedUser) {
           try {
@@ -137,7 +148,12 @@ export default function App() {
             setUser(u);
             setIsLoggedIn(true);
           } catch {
-            localStorage.removeItem('bloxmarket-user');
+            // Clear from the appropriate storage
+            if (isPersistentLogin) {
+              localStorage.removeItem('bloxmarket-user');
+            } else {
+              sessionStorage.removeItem('bloxmarket-user');
+            }
           }
         }
 
@@ -145,7 +161,10 @@ export default function App() {
           const me = await apiService.getCurrentUser();
           setUser(me);
           setIsLoggedIn(true);
-          localStorage.setItem('bloxmarket-user', JSON.stringify(me));
+          
+          // Save to the appropriate storage
+          const storage = isPersistentLogin ? localStorage : sessionStorage;
+          storage.setItem('bloxmarket-user', JSON.stringify(me));
         } catch (err) {
           // Keep UI; actual auth errors will dispatch 'auth-expired'
           console.warn('Token verify failed:', err);
@@ -168,9 +187,17 @@ export default function App() {
     setUser(null);
     setIsLoggedIn(false);
     setCurrentPage('auth');
+    
+    // Clear all tokens and user data from both storage types
     localStorage.removeItem('bloxmarket-token');
     localStorage.removeItem('bloxmarket-user');
     localStorage.removeItem('bloxmarket-is-admin');
+    
+    sessionStorage.removeItem('bloxmarket-token');
+    sessionStorage.removeItem('bloxmarket-user');
+    sessionStorage.removeItem('bloxmarket-is-admin');
+    
+    // Use the enhanced clearToken method to clear token from both storage locations
     apiService.clearToken();
   };
 
@@ -185,13 +212,19 @@ export default function App() {
     }
   };
 
-  const login = (userData: User) => {
+  const login = (userData: User, rememberMe: boolean = true) => {
     console.log('User logged in:', userData.username);
     setUser(userData);
     setIsLoggedIn(true);
     setCurrentPage('dashboard');
-    // Store user data for persistence
-    localStorage.setItem('bloxmarket-user', JSON.stringify(userData));
+    
+    // Store user data in the appropriate storage based on remember me preference
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem('bloxmarket-user', JSON.stringify(userData));
+    
+    // Clean up other storage to avoid conflicts
+    const otherStorage = rememberMe ? sessionStorage : localStorage;
+    otherStorage.removeItem('bloxmarket-user');
   };
 
   const logout = () => {
