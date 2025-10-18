@@ -36,26 +36,67 @@ import {
 import { useAuth } from '../App';
 import { formatDistanceToNow } from 'date-fns';
 
-const toISO = (v: any): string => {
-  if (!v) return new Date().toISOString();
-  const d = new Date(v);
-  return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+const toISO = (v: unknown): string => {
+  try {
+    if (!v) return new Date().toISOString();
+    
+    // Handle different date formats
+    if (typeof v === 'string' || v instanceof Date || typeof v === 'number') {
+      const d = new Date(v);
+      return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+    }
+    
+    // Handle MongoDB date format with $date property
+    if (v && typeof v === 'object' && '$date' in (v as object)) {
+      const dateValue = (v as { $date: unknown }).$date;
+      if (dateValue) {
+        const d = new Date(String(dateValue));
+        return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+      }
+    }
+    
+    // If it's an object with a date property
+    if (v && typeof v === 'object' && 'date' in (v as object)) {
+      const dateValue = (v as { date: unknown }).date;
+      if (dateValue) {
+        const d = new Date(String(dateValue));
+        return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+      }
+    }
+    
+    console.warn("Unknown date format:", v);
+    return new Date().toISOString();
+  } catch (error) {
+    console.error("Error converting date to ISO:", error, "Value was:", v);
+    return new Date().toISOString(); // Fallback to current date
+  }
 };
 
 const formatDate = (dateString: string): string => {
   try {
+    if (!dateString) return 'Unknown date';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Unknown date';
+    
+    // Check if the formatDistanceToNow function is available
+    if (typeof formatDistanceToNow !== 'function') {
+      console.error("formatDistanceToNow is not a function. Check if date-fns is imported properly.");
+      return new Date(dateString).toLocaleDateString();
+    }
+    
     return formatDistanceToNow(date, { addSuffix: true });
-  } catch {
+  } catch (error) {
+    console.error("Error formatting date:", error, "Date string was:", dateString);
     return 'Unknown date';
   }
 };
 
 const formatFullDate = (dateString: string): string => {
   try {
+    if (!dateString) return 'Unknown date';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Unknown date';
+    
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -63,7 +104,8 @@ const formatFullDate = (dateString: string): string => {
       hour: '2-digit',
       minute: '2-digit'
     });
-  } catch {
+  } catch (error) {
+    console.error("Error formatting full date:", error, "Date string was:", dateString);
     return 'Unknown date';
   }
 };
@@ -236,7 +278,7 @@ function ImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrevious 
           
           <div className="relative aspect-video bg-black flex items-center justify-center">
             <img
-              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${currentImage.image_url.split('/').pop()}`}
+              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${currentImage.image_url}`}
               alt={`Trade image ${currentIndex + 1}`}
               className="max-w-full max-h-full object-contain"
               crossOrigin="anonymous"
@@ -266,14 +308,8 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [votingLoading, setVotingLoading] = useState(false);
 
-  // Load trade comments when modal opens
-  useEffect(() => {
-    if (isOpen && trade) {
-      loadTradeData();
-    }
-  }, [isOpen, trade]);
-
-  const loadTradeData = async () => {
+  // Define loadTradeData with useCallback to prevent unnecessary rerenders
+  const loadTradeData = useCallback(async () => {
     if (!trade) return;
 
     try {
@@ -288,15 +324,32 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
 
       // Handle comments - map backend response properly
       if (commentsResponse.status === 'fulfilled') {
-        const mappedComments = commentsResponse.value.comments.map((comment: any) => ({
-          comment_id: comment.comment_id,
-          trade_id: trade.trade_id,
-          user_id: comment.user._id,
-          content: comment.content,
-          created_at: comment.created_at,
-          username: comment.user.username,
-          credibility_score: comment.user.credibility_score
-        }));
+        const mappedComments = commentsResponse.value.comments.map((comment: Record<string, unknown>) => {
+          // Convert created_at to proper ISO string
+          let createdAt = comment.created_at;
+          if (createdAt && typeof createdAt === 'object' && '$date' in (createdAt as Record<string, unknown>)) {
+            const dateValue = (createdAt as Record<string, unknown>).$date;
+            if (typeof dateValue === 'string' || typeof dateValue === 'number') {
+              createdAt = new Date(dateValue).toISOString();
+            }
+          } else if (createdAt && typeof createdAt === 'string') {
+            // Try to ensure it's a valid date string
+            const date = new Date(createdAt as string);
+            if (!isNaN(date.getTime())) {
+              createdAt = date.toISOString();
+            }
+          }
+
+          return {
+            comment_id: comment.comment_id as string,
+            trade_id: trade.trade_id,
+            user_id: (comment.user as Record<string, string>)._id,
+            content: comment.content as string,
+            created_at: createdAt as string,
+            username: (comment.user as Record<string, string>).username,
+            credibility_score: (comment.user as Record<string, number>).credibility_score
+          };
+        });
         setComments(mappedComments);
       } else {
         console.error('Failed to load comments:', commentsResponse.reason);
@@ -321,7 +374,14 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
     } finally {
       setLoadingComments(false);
     }
-  };
+  }, [trade]);
+
+  // Load trade comments when modal opens
+  useEffect(() => {
+    if (isOpen && trade) {
+      loadTradeData();
+    }
+  }, [isOpen, trade, loadTradeData]);
 
   const handleUpvote = async () => {
     if (!trade || votingLoading) return;
@@ -351,9 +411,10 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
       }
     } catch (error) {
       console.error('Failed to upvote:', error);
-      if (error.message.includes('cannot vote on your own trade')) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('cannot vote on your own trade')) {
         toast.error('You cannot vote on your own trade');
-      } else if (error.message.includes('401')) {
+      } else if (errorMessage.includes('401')) {
         toast.error('Please log in to vote');
       } else {
         toast.error('Failed to update vote');
@@ -391,9 +452,10 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
       }
     } catch (error) {
       console.error('Failed to downvote:', error);
-      if (error.message.includes('cannot vote on your own trade')) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('cannot vote on your own trade')) {
         toast.error('You cannot vote on your own trade');
-      } else if (error.message.includes('401')) {
+      } else if (errorMessage.includes('401')) {
         toast.error('Please log in to vote');
       } else {
         toast.error('Failed to update vote');
@@ -528,7 +590,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                 {trade.images.map((image, index) => (
                   <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow">
                     <ImageDisplay
-                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${image.image_url.split('/').pop()}`}
+                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${image.image_url}`}
                       alt={`Trade image ${index + 1}`}
                       className="w-full h-full"
                     />
@@ -625,7 +687,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(comment.created_at)}
+                          {formatDate(toISO(comment.created_at))}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">{comment.content}</p>
@@ -645,13 +707,20 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
             <div>
               <span className="text-muted-foreground">Posted:</span>
-              <div className="font-medium">{formatFullDate(trade.created_at)}</div>
-              <div className="text-xs text-muted-foreground">{formatDate(trade.created_at)}</div>
+              <div className="font-medium">{formatFullDate(toISO(trade.created_at))}</div>
+              <div className="text-xs text-muted-foreground">{formatDate(toISO(trade.created_at))}</div>
             </div>
             <div>
               <span className="text-muted-foreground">Trade ID:</span>
               <div className="font-medium font-mono">{trade.trade_id.slice(-8)}</div>
             </div>
+            {trade.updated_at && trade.updated_at !== trade.created_at && (
+              <div>
+                <span className="text-muted-foreground">Last Updated:</span>
+                <div className="font-medium">{formatFullDate(toISO(trade.updated_at))}</div>
+                <div className="text-xs text-muted-foreground">{formatDate(toISO(trade.updated_at))}</div>
+              </div>
+            )}
           </div>
         </DialogBody>
 
@@ -725,6 +794,7 @@ export function TradingHub() {
   const [createLoading, setCreateLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  // State for pagination - setCurrentPage is used in the loadTrades dependency array
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -764,37 +834,146 @@ export function TradingHub() {
       if (filterCategory !== 'all') params.status = filterCategory;
 
       const response = await apiService.getTrades(params);
+      
+      // Validate that we have trades data
+      if (!response || !response.trades || !Array.isArray(response.trades)) {
+        console.error('Invalid response format from getTrades:', response);
+        throw new Error('Invalid response format from server');
+      }
 
-      const mappedTrades = response.trades.map((trade: any) => ({
-        trade_id: trade.trade_id || trade._id,
-        item_offered: trade.item_offered,
-        item_requested: trade.item_requested,
-        description: trade.description,
-        status: trade.status,
-        created_at: toISO(trade.created_at || trade.createdAt),
-        updated_at: toISO(trade.updated_at || trade.updatedAt),
-        username: trade.user?.username || trade.username,
-        roblox_username: trade.user?.roblox_username || trade.roblox_username,
-        credibility_score: trade.user?.credibility_score ?? trade.credibility_score ?? 0,
-        user_id: trade.user?._id || trade.user_id,
-        images: Array.isArray(trade.images)
-          ? trade.images.map((img: any) =>
-              typeof img === 'string'
-                ? { image_url: img, uploaded_at: new Date().toISOString() }
-                : {
-                    image_url: img.image_url || img.filename || String(img).split('/').pop(),
-                    uploaded_at: toISO(img.uploaded_at)
+      // Define a more specific type for trade object
+      interface TradeData {
+        trade_id?: string;
+        _id?: string;
+        item_offered?: string;
+        item_requested?: string;
+        description?: string;
+        status?: string;
+        created_at?: string | Date;
+        createdAt?: string | Date;
+        updated_at?: string | Date;
+        updatedAt?: string | Date;
+        user?: {
+          username?: string;
+          roblox_username?: string;
+          credibility_score?: number;
+          _id?: string;
+        };
+        username?: string;
+        roblox_username?: string;
+        credibility_score?: number;
+        user_id?: string;
+        images?: unknown[];
+        upvotes?: number | string[] | null;
+        downvotes?: number | string[] | null;
+        comment_count?: number;
+      }
+      
+      const mappedTrades = response.trades.map((trade: TradeData) => {
+        try {
+          // Safely extract created_at and updated_at
+          const createdAtValue = trade.created_at || trade.createdAt;
+          const updatedAtValue = trade.updated_at || trade.updatedAt;
+          
+          // Handle images safely
+          // Define the image type structure
+          type TradeImage = {
+            image_url: string;
+            uploaded_at: string;
+          };
+          
+          let processedImages: TradeImage[] = [];
+          if (Array.isArray(trade.images)) {
+            processedImages = trade.images.map((img: unknown) => {
+              try {
+                if (typeof img === 'string') {
+                  // Handle case where the image is just a string path
+                  return { 
+                    image_url: img.startsWith('/') ? img : `/uploads/trades/${img}`, 
+                    uploaded_at: new Date().toISOString() 
+                  };
+                } else if (img && typeof img === 'object') {
+                  const imgObj = img as Record<string, unknown>;
+                  
+                  // Extract the image URL with proper formatting
+                  let imageUrl = '';
+                  if (typeof imgObj.image_url === 'string') {
+                    imageUrl = imgObj.image_url.startsWith('/') 
+                      ? imgObj.image_url 
+                      : `/uploads/trades/${imgObj.image_url}`;
+                  } else if (typeof imgObj.filename === 'string') {
+                    imageUrl = `/uploads/trades/${imgObj.filename}`;
+                  } else if (img) {
+                    // Last resort fallback
+                    imageUrl = `/uploads/trades/${String(img).split('/').pop() || 'unknown'}`;
                   }
-            )
-          : [],
-        upvotes: trade.upvotes || 0,
-        downvotes: trade.downvotes || 0,
-        comment_count: trade.comment_count || 0
-      }));
+                  
+                  // Extract the uploaded date
+                  const uploadedAt = toISO(imgObj.uploaded_at);
+                  
+                  return {
+                    image_url: imageUrl,
+                    uploaded_at: uploadedAt
+                  };
+                }
+                return {
+                  image_url: '/uploads/trades/placeholder.png',
+                  uploaded_at: new Date().toISOString()
+                };
+              } catch (imgErr) {
+                console.error('Error processing image:', imgErr, img);
+                return {
+                  image_url: '/uploads/trades/placeholder.png',
+                  uploaded_at: new Date().toISOString()
+                };
+              }
+            });
+          }
+          
+          return {
+            trade_id: trade.trade_id as string || trade._id as string,
+            item_offered: trade.item_offered as string || 'Unknown Item',
+            item_requested: trade.item_requested as string || '',
+            description: trade.description as string || '',
+            status: trade.status as string || 'unknown',
+            created_at: toISO(createdAtValue),
+            updated_at: toISO(updatedAtValue),
+            username: (trade.user?.username as string) || (trade.username as string) || 'Unknown User',
+            roblox_username: (trade.user?.roblox_username as string) || (trade.roblox_username as string) || '',
+            credibility_score: (trade.user?.credibility_score as number) ?? (trade.credibility_score as number) ?? 0,
+            user_id: (trade.user?._id as string) || (trade.user_id as string) || '',
+            images: processedImages,
+            upvotes: Array.isArray(trade.upvotes) ? trade.upvotes.length : (trade.upvotes as number) || 0,
+            downvotes: Array.isArray(trade.downvotes) ? trade.downvotes.length : (trade.downvotes as number) || 0,
+            comment_count: trade.comment_count as number || 0
+          };
+        } catch (tradeErr) {
+          console.error('Error processing trade:', tradeErr, trade);
+          // Return a minimal valid trade object as fallback
+          return {
+            trade_id: (trade.trade_id as string) || (trade._id as string) || 'unknown-id',
+            item_offered: 'Error loading item',
+            item_requested: '',
+            description: '',
+            status: 'error',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            username: 'Unknown',
+            roblox_username: '',
+            credibility_score: 0,
+            user_id: '',
+            images: [] as {image_url: string, uploaded_at: string}[],
+            upvotes: 0,
+            downvotes: 0,
+            comment_count: 0
+          };
+        }
+      });
 
       setTrades(mappedTrades);
-      if (response.pagination) setTotalPages(response.pagination.totalPages);
+      if (response.pagination) setTotalPages(response.pagination.totalPages || 1);
     } catch (err) {
+      console.error('Error loading trades:', err);
       setError(err instanceof Error ? err.message : 'Failed to load trades');
     } finally {
       setLoading(false);
@@ -1636,7 +1815,7 @@ export function TradingHub() {
                         handleImageClick(trade.images!, 0);
                       }}>
                         <ImageDisplay
-                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${trade.images[0].image_url.split('/').pop()}`}
+                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${trade.images[0].image_url}`}
                           alt={`${trade.item_offered} - Trade item`}
                           className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
                         />
@@ -1691,7 +1870,7 @@ export function TradingHub() {
                     {/* Timestamp */}
                     <div className="pt-2 border-t border-border">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{formatDate(trade.created_at)}</span>
+                        <span>{formatDate(toISO(trade.created_at))}</span>
                         <span>ID: {trade.trade_id.slice(-6)}</span>
                       </div>
                     </div>
@@ -1887,7 +2066,59 @@ export function TradingHub() {
         onPrevious={handlePreviousImage}
       />
 
-      {/* ...existing create and edit dialogs... */}
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex justify-center mt-8 mb-4 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1 || loading}
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Previous
+          </Button>
+          
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              // Show current page and nearby pages
+              let pageToShow: number;
+              if (totalPages <= 5) {
+                pageToShow = i + 1;
+              } else if (currentPage <= 3) {
+                pageToShow = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageToShow = totalPages - 4 + i;
+              } else {
+                pageToShow = currentPage - 2 + i;
+              }
+              
+              return (
+                <Button
+                  key={i}
+                  variant={currentPage === pageToShow ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(pageToShow)}
+                  disabled={loading}
+                  className={`w-9 h-9 p-0 ${currentPage === pageToShow ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''}`}
+                >
+                  {pageToShow}
+                </Button>
+              );
+            })}
+          </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages || loading}
+          >
+            Next
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
