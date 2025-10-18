@@ -1,4 +1,5 @@
 const API_BASE_URL = 'http://localhost:5000/api';
+import { shouldThrottle } from '../lib/throttle';
 
 class ApiService {
   private token: string | null;
@@ -26,6 +27,28 @@ class ApiService {
     }
   }
 
+  // Track pending requests to prevent duplicates
+  private pendingRequests = new Map<string, Promise<any>>();
+
+  // Determine request category based on endpoint
+  private getRequestCategory(endpoint: string): 'auth' | 'standard' | 'heavy' {
+    if (endpoint.startsWith('/auth')) {
+      return 'auth';
+    }
+    
+    // Identify resource-heavy operations
+    if (
+      endpoint.includes('/upload') || 
+      endpoint.includes('/images') ||
+      endpoint.includes('/admin/datatables') ||
+      endpoint.includes('/export/csv')
+    ) {
+      return 'heavy';
+    }
+    
+    return 'standard';
+  }
+
   async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     // Check both storage types for the token
@@ -43,49 +66,103 @@ class ApiService {
       },
     };
 
-    try {
-      const response = await fetch(url, config);
-      const contentType = response.headers.get('content-type') || '';
-      const data = contentType.includes('application/json') ? await response.json() : { error: await response.text() };
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          const errMsg = typeof data?.error === 'string' ? data.error : '';
-          const isAuthError =
-            errMsg === 'Access denied. No token provided.' ||
-            errMsg === 'Token expired' ||
-            errMsg === 'Invalid token' ||
-            errMsg === 'Token verification failed' ||
-            errMsg === 'User not found';
-
-          if (isAuthError) {
-            // Verify once to avoid false positives during navigation
-            const ok = currentToken ? await this.verifyTokenSilently(currentToken) : false;
-            if (!ok) {
+    // Create a request key for deduplication (for GET requests only)
+    const isGetRequest = !options.method || options.method === 'GET';
+    const requestKey = isGetRequest ? `${options.method || 'GET'}-${endpoint}` : null;
+    
+    // Return existing promise for duplicate GET requests
+    if (isGetRequest && requestKey && this.pendingRequests.has(requestKey)) {
+      return this.pendingRequests.get(requestKey);
+    }
+    
+    // Apply client-side throttling
+    const requestCategory = this.getRequestCategory(endpoint);
+    const { throttled, waitTime } = shouldThrottle(endpoint, requestCategory);
+    
+    if (throttled && waitTime > 0) {
+      // Wait before making the request to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    const requestPromise = (async () => {
+      try {
+        const response = await fetch(url, config);
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await response.json() : { error: await response.text() };
+  
+        if (!response.ok) {
+          if (response.status === 401) {
+            const errMsg = typeof data?.error === 'string' ? data.error : '';
+            const isAuthError =
+              errMsg === 'Access denied. No token provided.' ||
+              errMsg === 'Token expired' ||
+              errMsg === 'Invalid token' ||
+              errMsg === 'Token verification failed' ||
+              errMsg === 'User not found';
+  
+            if (isAuthError) {
+              // Verify once to avoid false positives during navigation
+              const ok = currentToken ? await this.verifyTokenSilently(currentToken) : false;
+              if (!ok) {
+                this.clearToken();
+                window.dispatchEvent(new CustomEvent('auth-expired'));
+                throw new Error('Session expired. Please log in again.');
+              }
+              // Token is valid; treat as access error for this endpoint
+              throw new Error(data?.error || 'Access denied');
+            }
+          }
+          if (response.status === 403) {
+            const errMsg = typeof data?.error === 'string' ? data.error : '';
+            if (errMsg === 'Account is banned' || errMsg === 'Account is deactivated') {
               this.clearToken();
               window.dispatchEvent(new CustomEvent('auth-expired'));
-              throw new Error('Session expired. Please log in again.');
             }
-            // Token is valid; treat as access error for this endpoint
-            throw new Error(data?.error || 'Access denied');
+            // Do NOT logout on 'Admin access required'
           }
-        }
-        if (response.status === 403) {
-          const errMsg = typeof data?.error === 'string' ? data.error : '';
-          if (errMsg === 'Account is banned' || errMsg === 'Account is deactivated') {
-            this.clearToken();
-            window.dispatchEvent(new CustomEvent('auth-expired'));
+          // Handle rate limiting error (429 Too Many Requests)
+          if (response.status === 429) {
+            // Get retry-after header if available
+            const retryAfter = response.headers.get('Retry-After');
+            const waitSeconds = retryAfter ? parseInt(retryAfter, 10) : 60;
+            const waitMinutes = Math.ceil(waitSeconds / 60);
+            
+            // Dispatch custom event that the UI can listen for
+            window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { 
+              detail: { retryAfter: waitSeconds } 
+            }));
+            
+            // Custom error message with wait time if available
+            throw new Error(data?.error || `Rate limit exceeded. Please wait ${waitMinutes} minute(s) before trying again.`);
           }
-          // Do NOT logout on 'Admin access required'
+          throw new Error(data?.error || 'API request failed');
         }
-        throw new Error(data?.error || 'API request failed');
+  
+        return data;
+      } catch (error) {
+        console.error('API request error:', error);
+        throw error;
+      } finally {
+        // Clean up pending request reference
+        if (requestKey) {
+          this.pendingRequests.delete(requestKey);
+        }
       }
-
-      return data;
-    } catch (error) {
-      console.error('API request error:', error);
-      throw error;
+    })();
+    
+    // Store the promise for GET requests to deduplicate
+    if (isGetRequest && requestKey) {
+      this.pendingRequests.set(requestKey, requestPromise);
+      
+      // Set a timeout to clean up the pending request
+      setTimeout(() => {
+        if (this.pendingRequests.get(requestKey) === requestPromise) {
+          this.pendingRequests.delete(requestKey);
+        }
+      }, 30000); // 30 second timeout
     }
+    
+    return requestPromise;
   }
 
   // Auth methods
@@ -654,9 +731,7 @@ class ApiService {
   }
 
   // User profile methods
-  async getCurrentUser() {
-    return this.request('/auth/me', { method: 'GET' });
-  }
+  // getCurrentUser() is already defined above
 
   async getUserProfile(userId: string) {
     return this.request(`/users/${userId}`);
@@ -1165,8 +1240,8 @@ class ApiService {
     }
   }
 
-  // Fetch all forum posts (for fallback filtering)
-  async getForumPosts(params: { page?: number; limit?: number; search?: string; category?: string } = {}) {
+  // Fetch all forum posts (for fallback filtering) - Replacing the duplicate method
+  async getAllForumPosts(params: { page?: number; limit?: number; search?: string; category?: string } = {}) {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
@@ -1174,8 +1249,8 @@ class ApiService {
     const endpoint = `/forum/posts${qs.toString() ? `?${qs.toString()}` : ''}`;
     const data = await this.request(endpoint, { method: 'GET' });
     if (Array.isArray(data)) return data;
-    if (Array.isArray((data as any)?.posts)) return (data as any).posts;
-    if (Array.isArray((data as any)?.data)) return (data as any).data;
+    if (Array.isArray((data as Record<string, unknown>)?.posts)) return (data as Record<string, unknown[]>).posts;
+    if (Array.isArray((data as Record<string, unknown>)?.data)) return (data as Record<string, unknown[]>).data;
     return [];
   }
 

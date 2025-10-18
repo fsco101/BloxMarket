@@ -123,6 +123,17 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // State for rate limit notifications
+  const [rateLimitNotification, setRateLimitNotification] = useState<{
+    visible: boolean;
+    message: string;
+    retryAfter: number;
+  }>({
+    visible: false,
+    message: '',
+    retryAfter: 0
+  });
+
   useEffect(() => {
     const initAuth = async () => {
       // Check both storage types for tokens and user data
@@ -177,9 +188,34 @@ export default function App() {
     };
 
     const onExpired = () => handleLogout();
+    
+    // Handle rate limit exceeded events
+    const onRateLimitExceeded = (event: Event) => {
+      const customEvent = event as CustomEvent<{ retryAfter: number }>;
+      const retryAfter = customEvent.detail.retryAfter || 60;
+      const minutes = Math.ceil(retryAfter / 60);
+      
+      setRateLimitNotification({
+        visible: true,
+        message: `Rate limit exceeded. Please wait ${minutes} minute(s) before trying again.`,
+        retryAfter
+      });
+      
+      // Auto-hide notification after retry period
+      setTimeout(() => {
+        setRateLimitNotification(prev => ({ ...prev, visible: false }));
+      }, retryAfter * 1000);
+    };
+    
     window.addEventListener('auth-expired', onExpired);
+    window.addEventListener('rate-limit-exceeded', onRateLimitExceeded);
+    
     initAuth();
-    return () => window.removeEventListener('auth-expired', onExpired);
+    
+    return () => {
+      window.removeEventListener('auth-expired', onExpired);
+      window.removeEventListener('rate-limit-exceeded', onRateLimitExceeded);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -304,6 +340,36 @@ export default function App() {
                 {renderCurrentPage()}
               </ErrorBoundary>
             </main>
+            
+            {/* Rate Limit Error Notification */}
+            {rateLimitNotification.visible && (
+              <div className="fixed bottom-4 right-4 z-50 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium">{rateLimitNotification.message}</p>
+                  </div>
+                  <div className="ml-auto pl-3">
+                    <div className="-mx-1.5 -my-1.5">
+                      <button
+                        type="button"
+                        className="inline-flex rounded-md p-1.5 text-white hover:bg-red-600 focus:outline-none"
+                        onClick={() => setRateLimitNotification(prev => ({ ...prev, visible: false }))}
+                      >
+                        <span className="sr-only">Dismiss</span>
+                        <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </AppContext.Provider>
       </AuthContext.Provider>

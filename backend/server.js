@@ -51,12 +51,53 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
-const limiter = rateLimit({
+// Rate limiting - Different limits for different endpoints
+// Helper function to create consistent rate limiter responses
+const createRateLimitHandler = (message, windowMs) => {
+  return (req, res) => {
+    // Calculate reset time in seconds
+    const resetTime = Math.ceil(windowMs / 1000);
+    
+    // Set retry-after header
+    res.setHeader('Retry-After', resetTime);
+    
+    // Send the error response
+    res.status(429).json({
+      error: message,
+      retryAfter: resetTime,
+      retryAfterMinutes: Math.ceil(resetTime / 60)
+    });
+  };
+};
+
+// Standard limiter for general API requests
+const standardLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs (increased from 100)
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  handler: createRateLimitHandler('Too many requests, please try again later.', 15 * 60 * 1000),
+  skipSuccessfulRequests: false, // Do not count successful requests
 });
-app.use(limiter);
+
+// Strict limiter for authentication routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // limit each IP to 50 requests per windowMs for auth endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: createRateLimitHandler('Too many login attempts, please try again later.', 15 * 60 * 1000),
+  skipFailedRequests: false, // Count failed requests
+});
+
+// Very strict limiter for sensitive operations
+const sensitiveOpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // limit each IP to 10 requests per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: createRateLimitHandler('Too many sensitive operations attempted, please try again later.', 60 * 60 * 1000),
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -114,31 +155,69 @@ connectToDatabase();
 
 // Remove this custom CORS middleware as we're using the cors package above
 
-// Routes
-app.use('/api/auth', authRoutes);
+// Apply standard rate limiter to all routes by default
+app.use(standardLimiter);
+
+// Routes with specific rate limiting
+app.use('/api/auth', authLimiter, authRoutes); // Stricter rate limiting for auth routes
 app.use('/api/trades', tradeRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', sensitiveOpLimiter, adminRoutes); // Stricter limit for admin operations
 app.use('/api/uploads', uploadsRoutes);
-app.use('/api/verification', verificationRoutes);
+app.use('/api/verification', sensitiveOpLimiter, verificationRoutes); // Stricter for verification
 app.use('/api/admin/datatables', userDatatableRoutes);
 app.use('/api/wishlists', wishlistRoutes); // Add this line
 
-// Admin DataTable Routes
-app.use('/api/admin/datatables/users', userDatatableRoutes);
-app.use('/api/admin/datatables/events', eventsDatatableRoutes);
-app.use('/api/admin/datatables/forum', forumDatatableRoutes);
-app.use('/api/admin/datatables/trading-posts', tradingPostDatatableRoutes);
-app.use('/api/admin/datatables/wishlists', wishlistDatatableRoutes);
+// Custom rate limiter for datatable endpoints (which can be resource-intensive)
+const datatableLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 50, // 50 requests per 5 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many datatable requests, please try again later.' },
+});
 
-// Health check endpoint
+// Admin DataTable Routes with specific rate limiting
+app.use('/api/admin/datatables/users', datatableLimiter, userDatatableRoutes);
+app.use('/api/admin/datatables/events', datatableLimiter, eventsDatatableRoutes);
+app.use('/api/admin/datatables/forum', datatableLimiter, forumDatatableRoutes);
+app.use('/api/admin/datatables/trading-posts', datatableLimiter, tradingPostDatatableRoutes);
+app.use('/api/admin/datatables/wishlists', datatableLimiter, wishlistDatatableRoutes);
+
+// Health check endpoint with rate limit info
 app.get('/api/health', (req, res) => {
+  // Get rate limit info from req if available
+  const rateLimitInfo = {
+    standard: {
+      limit: 500,
+      windowMs: 15 * 60 * 1000,
+      windowMinutes: 15
+    },
+    auth: {
+      limit: 50,
+      windowMs: 15 * 60 * 1000,
+      windowMinutes: 15
+    },
+    sensitive: {
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+      windowMinutes: 60
+    },
+    datatables: {
+      limit: 50,
+      windowMs: 5 * 60 * 1000,
+      windowMinutes: 5
+    }
+  };
+
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    rateLimits: rateLimitInfo,
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
