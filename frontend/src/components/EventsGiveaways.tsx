@@ -44,7 +44,7 @@ interface Event {
   prizes?: string[];
   requirements?: string[];
   maxParticipants?: number;
-  participantCount?: number;
+  interestedCount?: number;
   startDate: string;
   endDate: string;
   creator?: {
@@ -52,7 +52,7 @@ interface Event {
     avatar?: string;
     verified?: boolean;
   };
-  participants?: Array<{
+  interested?: Array<{
     _id: string;
     username: string;
     avatar?: string;
@@ -124,51 +124,51 @@ function EventDetailsModal({
 
   // Load event comments and votes when modal opens
   useEffect(() => {
+    const loadEventData = async () => {
+      if (!event) return;
+  
+      try {
+        setLoadingComments(true);
+        console.log('Loading event data for:', event._id);
+        
+        // Load comments and vote data
+        const [commentsResponse, voteResponse] = await Promise.allSettled([
+          apiService.getEventComments(event._id),
+          apiService.getEventVotes(event._id)
+        ]);
+  
+        // Handle comments
+        if (commentsResponse.status === 'fulfilled') {
+          setComments(commentsResponse.value.comments || []);
+        } else {
+          console.error('Failed to load comments:', commentsResponse.reason);
+          setComments([]);
+        }
+  
+        // Handle votes
+        if (voteResponse.status === 'fulfilled') {
+          setUpvotes(voteResponse.value.upvotes || 0);
+          setDownvotes(voteResponse.value.downvotes || 0);
+          setUserVote(voteResponse.value.userVote || null);
+        } else {
+          console.error('Failed to load votes:', voteResponse.reason);
+          setUpvotes(event.upvotes || 0);
+          setDownvotes(event.downvotes || 0);
+          setUserVote(null);
+        }
+  
+      } catch (error) {
+        console.error('Failed to load event data:', error);
+        toast.error('Failed to load event data');
+      } finally {
+        setLoadingComments(false);
+      }
+    };
+
     if (isOpen && event) {
       loadEventData();
     }
   }, [isOpen, event]);
-
-  const loadEventData = async () => {
-    if (!event) return;
-
-    try {
-      setLoadingComments(true);
-      console.log('Loading event data for:', event._id);
-      
-      // Load comments and vote data
-      const [commentsResponse, voteResponse] = await Promise.allSettled([
-        apiService.getEventComments(event._id),
-        apiService.getEventVotes(event._id)
-      ]);
-
-      // Handle comments
-      if (commentsResponse.status === 'fulfilled') {
-        setComments(commentsResponse.value.comments || []);
-      } else {
-        console.error('Failed to load comments:', commentsResponse.reason);
-        setComments([]);
-      }
-
-      // Handle votes
-      if (voteResponse.status === 'fulfilled') {
-        setUpvotes(voteResponse.value.upvotes || 0);
-        setDownvotes(voteResponse.value.downvotes || 0);
-        setUserVote(voteResponse.value.userVote || null);
-      } else {
-        console.error('Failed to load votes:', voteResponse.reason);
-        setUpvotes(event.upvotes || 0);
-        setDownvotes(event.downvotes || 0);
-        setUserVote(null);
-      }
-
-    } catch (error) {
-      console.error('Failed to load event data:', error);
-      toast.error('Failed to load event data');
-    } finally {
-      setLoadingComments(false);
-    }
-  };
 
   const handleUpvote = async () => {
     if (!event || votingLoading) return;
@@ -428,12 +428,12 @@ function EventDetailsModal({
               {/* Progress */}
               {event.maxParticipants && (
                 <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold mb-2">Participation</h4>
+                  <h4 className="font-semibold mb-2">Interest</h4>
                   <div className="flex justify-between text-sm mb-2">
-                    <span>{event.participantCount || 0} participants</span>
+                    <span>{event.interestedCount || 0} interested</span>
                     <span>{event.maxParticipants} max</span>
                   </div>
-                  <Progress value={((event.participantCount || 0) / event.maxParticipants) * 100} className="h-2" />
+                  <Progress value={((event.interestedCount || 0) / event.maxParticipants) * 100} className="h-2" />
                 </div>
               )}
             </div>
@@ -568,14 +568,14 @@ function EventDetailsModal({
                 {joinLoading === event._id ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Joining...
+                    Marking as interested...
                   </>
                 ) : (
                   <>
                     {getTypeIcon(event.type)}
                     <span className="ml-2">
-                      {event.type === 'giveaway' ? 'Enter Giveaway' : 
-                       event.type === 'competition' ? 'Join Competition' : 'RSVP'}
+                      {event.type === 'giveaway' ? 'Interested in Giveaway' : 
+                       event.type === 'competition' ? 'Interested in Competition' : 'Interested'}
                     </span>
                   </>
                 )}
@@ -686,6 +686,17 @@ export function EventsGiveaways() {
   const [createLoading, setCreateLoading] = useState(false);
   const [joinLoading, setJoinLoading] = useState<string | null>(null);
   
+  // Utility function to get current date in proper format for datetime-local input
+  const getCurrentDateTimeLocal = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  
   // Modal states
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -704,12 +715,24 @@ export function EventsGiveaways() {
   // Check if user is admin or moderator
   const isAdminOrModerator = user?.role === 'admin' || user?.role === 'moderator';
   
+  // Initialize with default dates (current date for start, tomorrow for end)
+  const getDefaultDates = () => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    return {
+      startDate: now.toISOString().slice(0, 16),
+      endDate: tomorrow.toISOString().slice(0, 16)
+    };
+  };
+  
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
     type: 'event',
-    startDate: '',
-    endDate: '',
+    startDate: getDefaultDates().startDate,
+    endDate: getDefaultDates().endDate,
     prizes: [] as string[],
     requirements: [] as string[],
     maxParticipants: undefined as number | undefined
@@ -720,7 +743,6 @@ export function EventsGiveaways() {
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   // Image handling state
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [uploadSelectedImages, setUploadSelectedImages] = useState<File[]>([]);
 
@@ -778,12 +800,31 @@ export function EventsGiveaways() {
             comment_count = commentResponse.value.comments?.length || 0;
           }
 
-          return {
+          // Convert participants to interested if backend still uses participants terminology
+          // Define a more specific type for the potentially different API response
+          interface LegacyEventResponse extends Event {
+            participantCount?: number;
+            participants?: Array<{
+              _id: string;
+              username: string;
+              avatar?: string;
+            }>;
+          }
+          
+          const eventWithLegacy = event as LegacyEventResponse;
+          
+          const remappedEvent = {
             ...event,
             upvotes,
             downvotes,
-            comment_count
+            comment_count,
+            // Map participantCount to interestedCount if backend still uses old naming
+            interestedCount: event.interestedCount || eventWithLegacy.participantCount || 0,
+            // Map participants array to interested array if backend still uses old naming
+            interested: event.interested || eventWithLegacy.participants || []
           };
+          
+          return remappedEvent;
         } catch (error) {
           console.error('Failed to load counts for event:', event._id, error);
           return {
@@ -858,11 +899,31 @@ export function EventsGiveaways() {
   const clearImages = () => {
     setUploadSelectedImages([]);
     setImagePreviewUrls([]);
-    setSelectedImages([]);
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate dates
+    const now = new Date();
+    const startDate = newEvent.startDate ? new Date(newEvent.startDate) : null;
+    const endDate = newEvent.endDate ? new Date(newEvent.endDate) : null;
+    
+    if (!startDate || !endDate) {
+      setError('Start date and end date are required');
+      return;
+    }
+    
+    if (startDate < now) {
+      setError('Start date cannot be in the past');
+      return;
+    }
+    
+    if (endDate < startDate) {
+      setError('End date must be after start date');
+      return;
+    }
+    
     try {
       setCreateLoading(true);
       setError('');
@@ -879,16 +940,6 @@ export function EventsGiveaways() {
       }, uploadSelectedImages);
       
       setIsCreateDialogOpen(false);
-      setNewEvent({
-        title: '',
-        description: '',
-        type: 'event',
-        startDate: '',
-        endDate: '',
-        prizes: [],
-        requirements: [],
-        maxParticipants: undefined
-      });
       
       // Clear images
       clearImages();
@@ -911,12 +962,12 @@ export function EventsGiveaways() {
       
       await apiService.joinEvent(eventId);
       
-      // Reload events to update participant count
+      // Reload events to update interested count
       await loadEvents();
-      toast.success(`Successfully joined ${eventType}!`);
+      toast.success(`Successfully marked interest in ${eventType}!`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to join ${eventType}`);
-      toast.error(`Failed to join ${eventType}`);
+      setError(err instanceof Error ? err.message : `Failed to mark interest in ${eventType}`);
+      toast.error(`Failed to mark interest in ${eventType}`);
     } finally {
       setJoinLoading(null);
     }
@@ -951,12 +1002,26 @@ export function EventsGiveaways() {
 
   const handleEditEvent = (event: Event) => {
     setEditingEvent(event);
+    
+    // Get current date for validation
+    const now = new Date();
+    
+    // Format dates, ensuring they're not in the past
+    let startDateObj = event.startDate ? new Date(event.startDate) : now;
+    if (startDateObj < now) startDateObj = now;
+    
+    let endDateObj = event.endDate ? new Date(event.endDate) : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    if (endDateObj < now) endDateObj = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    const startDate = startDateObj.toISOString().slice(0, 16);
+    const endDate = endDateObj.toISOString().slice(0, 16);
+    
     setNewEvent({
       title: event.title,
       description: event.description,
       type: event.type,
-      startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : '',
-      endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+      startDate,
+      endDate,
       prizes: event.prizes || [],
       requirements: event.requirements || [],
       maxParticipants: event.maxParticipants
@@ -970,6 +1035,26 @@ export function EventsGiveaways() {
     e.preventDefault();
     if (!editingEvent) return;
 
+    // Validate dates
+    const now = new Date();
+    const startDate = newEvent.startDate ? new Date(newEvent.startDate) : null;
+    const endDate = newEvent.endDate ? new Date(newEvent.endDate) : null;
+    
+    if (!startDate || !endDate) {
+      setError('Start date and end date are required');
+      return;
+    }
+    
+    if (startDate < now) {
+      setError('Start date cannot be in the past');
+      return;
+    }
+    
+    if (endDate < startDate) {
+      setError('End date must be after start date');
+      return;
+    }
+    
     try {
       setCreateLoading(true);
       setError('');
@@ -987,12 +1072,15 @@ export function EventsGiveaways() {
       
       setIsEditDialogOpen(false);
       setEditingEvent(null);
+      
+      // Reset form with default dates
+      const defaultDates = getDefaultDates();
       setNewEvent({
         title: '',
         description: '',
         type: 'event',
-        startDate: '',
-        endDate: '',
+        startDate: defaultDates.startDate,
+        endDate: defaultDates.endDate,
         prizes: [],
         requirements: [],
         maxParticipants: undefined
@@ -1217,7 +1305,27 @@ export function EventsGiveaways() {
               Event Calendar
             </Button>
             {isAdminOrModerator && (
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <Dialog 
+                open={isCreateDialogOpen} 
+                onOpenChange={(open) => {
+                  if (open) {
+                    // Reset form with default dates when opening
+                    const defaultDates = getDefaultDates();
+                    setNewEvent(prev => ({
+                      ...prev,
+                      title: '',
+                      description: '',
+                      type: 'event',
+                      startDate: defaultDates.startDate,
+                      endDate: defaultDates.endDate,
+                      prizes: [],
+                      requirements: [],
+                      maxParticipants: undefined
+                    }));
+                  }
+                  setIsCreateDialogOpen(open);
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white">
                     <Plus className="w-4 h-4 mr-2" />
@@ -1827,10 +1935,10 @@ export function EventsGiveaways() {
                   {event.maxParticipants && (
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>Participants: {event.participantCount || 0}</span>
+                        <span>Interested: {event.interestedCount || 0}</span>
                         <span>{event.maxParticipants} max</span>
                       </div>
-                      <Progress value={((event.participantCount || 0) / event.maxParticipants) * 100} className="h-2" />
+                      <Progress value={((event.interestedCount || 0) / event.maxParticipants) * 100} className="h-2" />
                     </div>
                   )}
 
@@ -1900,11 +2008,11 @@ export function EventsGiveaways() {
                       {joinLoading === event._id ? (
                         <>
                           <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Joining...
+                          Interested...
                         </>
                       ) : (
-                        event.type === 'giveaway' ? 'Enter Giveaway' : 
-                        event.type === 'competition' ? 'Join Competition' : 'RSVP'
+                        event.type === 'giveaway' ? 'I\'m Interested' : 
+                        event.type === 'competition' ? 'I\'m Interested' : 'I\'m Interested'
                       )}
                     </Button>
                     <Button 
@@ -2054,6 +2162,8 @@ export function EventsGiveaways() {
                   type="datetime-local"
                   value={newEvent.startDate}
                   onChange={(e) => setNewEvent(prev => ({ ...prev, startDate: e.target.value }))}
+                  min={getCurrentDateTimeLocal()}
+                  required
                 />
               </div>
               
@@ -2064,12 +2174,14 @@ export function EventsGiveaways() {
                   type="datetime-local"
                   value={newEvent.endDate}
                   onChange={(e) => setNewEvent(prev => ({ ...prev, endDate: e.target.value }))}
+                  min={newEvent.startDate || getCurrentDateTimeLocal()}
+                  required
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="max-participants">Max Participants (optional)</Label>
+              <Label htmlFor="max-participants">Max Interested (optional)</Label>
               <Input
                 id="max-participants"
                 type="number"
@@ -2232,7 +2344,27 @@ export function EventsGiveaways() {
 
       {/* Edit Event Dialog */}
       {editingEvent && (
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog 
+          open={isEditDialogOpen} 
+          onOpenChange={(open) => {
+            // Validate dates when reopening the form
+            if (open && editingEvent) {
+              const now = new Date();
+              let startDateObj = editingEvent.startDate ? new Date(editingEvent.startDate) : now;
+              if (startDateObj < now) startDateObj = now;
+              
+              let endDateObj = editingEvent.endDate ? new Date(editingEvent.endDate) : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              if (endDateObj < now) endDateObj = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              
+              setNewEvent(prev => ({
+                ...prev,
+                startDate: startDateObj.toISOString().slice(0, 16),
+                endDate: endDateObj.toISOString().slice(0, 16),
+              }));
+            }
+            setIsEditDialogOpen(open);
+          }}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Event</DialogTitle>
@@ -2286,6 +2418,8 @@ export function EventsGiveaways() {
                     type="datetime-local"
                     value={newEvent.startDate}
                     onChange={(e) => setNewEvent(prev => ({ ...prev, startDate: e.target.value }))}
+                    min={getCurrentDateTimeLocal()}
+                    required
                   />
                 </div>
                 
@@ -2296,12 +2430,14 @@ export function EventsGiveaways() {
                     type="datetime-local"
                     value={newEvent.endDate}
                     onChange={(e) => setNewEvent(prev => ({ ...prev, endDate: e.target.value }))}
+                    min={newEvent.startDate || getCurrentDateTimeLocal()}
+                    required
                   />
                 </div>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="edit-max-participants">Max Participants (optional)</Label>
+                <Label htmlFor="edit-max-participants">Max Interested (optional)</Label>
                 <Input
                   id="edit-max-participants"
                   type="number"
