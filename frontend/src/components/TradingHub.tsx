@@ -166,7 +166,17 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
 
   const handleImageError = () => {
     console.error('Image failed to load:', src);
-    if (retryCount < 2) {
+    
+    // First attempt: try the original URL
+    if (retryCount === 0) {
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        setImageError(false);
+        setImageLoading(true);
+      }, 1000);
+    } 
+    // Second attempt: try to fix URL format if needed
+    else if (retryCount === 1) {
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
         setImageError(false);
@@ -209,7 +219,7 @@ function ImageDisplay({ src, alt, className, fallback }: ImageDisplayProps) {
         </div>
       )}
       <img
-        src={`${src}${retryCount > 0 ? `?v=${retryCount}` : ''}`}
+        src={retryCount === 2 ? src.replace(/^(https?:\/\/[^/]+)?(\/uploads\/trades\/)?(.+)$/, `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/trades/$3`) : `${src}${retryCount === 1 ? `?v=${retryCount}` : ''}`}
         alt={alt}
         className={`w-full h-full object-cover rounded ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
         onLoad={handleImageLoad}
@@ -278,7 +288,7 @@ function ImageModal({ images, currentIndex, isOpen, onClose, onNext, onPrevious 
           
           <div className="relative aspect-video bg-black flex items-center justify-center">
             <img
-              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${currentImage.image_url}`}
+              src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${currentImage.image_url.startsWith('/') ? currentImage.image_url : `/uploads/trades/${currentImage.image_url}`}`}
               alt={`Trade image ${currentIndex + 1}`}
               className="max-w-full max-h-full object-contain"
               crossOrigin="anonymous"
@@ -590,7 +600,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                 {trade.images.map((image, index) => (
                   <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow">
                     <ImageDisplay
-                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${image.image_url}`}
+                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${image.image_url.startsWith('/') ? image.image_url : `/uploads/trades/${image.image_url}`}`}
                       alt={`Trade image ${index + 1}`}
                       className="w-full h-full"
                     />
@@ -1815,7 +1825,7 @@ export function TradingHub() {
                         handleImageClick(trade.images!, 0);
                       }}>
                         <ImageDisplay
-                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${trade.images[0].image_url}`}
+                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${trade.images[0].image_url.startsWith('/') ? trade.images[0].image_url : `/uploads/trades/${trade.images[0].image_url}`}`}
                           alt={`${trade.item_offered} - Trade item`}
                           className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
                         />

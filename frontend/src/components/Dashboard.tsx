@@ -40,11 +40,22 @@ interface Trade {
   description?: string;
   status: string;
   created_at: string;
-  username: string;
-  roblox_username: string;
-  credibility_score: number;
+  username?: string; // Optional for backward compatibility
+  roblox_username?: string; // Optional for backward compatibility
+  credibility_score?: number; // Optional for backward compatibility
   user_id: string;
-  images?: Array<{ image_url: string; uploaded_at: string }>;
+  user?: {
+    _id: string;
+    username: string;
+    roblox_username: string;
+    credibility_score: number;
+  };
+  images?: Array<{ 
+    image_url: string; 
+    uploaded_at?: string;
+    filename?: string;
+    path?: string; 
+  }>;
   upvotes?: number;
   downvotes?: number;
   comment_count?: number;
@@ -874,6 +885,7 @@ export function Dashboard() {
         // Process trades data with upvote/downvote system
         if (tradesData.status === 'fulfilled' && tradesData.value?.trades) {
           const trades: Trade[] = tradesData.value.trades;
+          console.log("First trade from API:", trades[0]); // Log first trade for debugging
           activeTradeCount = trades.filter(trade => trade.status === 'open').length;
           
           trades.forEach(trade => {
@@ -891,12 +903,42 @@ export function Dashboard() {
               console.warn('Invalid date format for trade:', trade.trade_id);
             }
 
+            // Handle user data which might be nested
+            const userData = trade.user || {
+              _id: '',
+              username: trade.username || '',
+              roblox_username: trade.roblox_username || '',
+              credibility_score: trade.credibility_score || 0
+            };
+            
+            // Fix image processing
             let images: Array<{ url: string; type: 'trade' | 'forum' }> = [];
             if (trade.images && trade.images.length > 0) {
-              images = trade.images.map(img => ({
-                url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${img.image_url.split('/').pop()}`,
-                type: 'trade' as const
-              }));
+              images = trade.images.map(img => {
+                // Handle different image data structures
+                if (!img) return { url: '', type: 'trade' as const };
+                
+                // Extract the filename from image_url (preferred) or filename field
+                let fileName;
+                if (img.image_url) {
+                  // Format: '/uploads/trades/filename.jpg' or just 'filename.jpg'
+                  fileName = img.image_url.includes('/') 
+                    ? img.image_url.split('/').pop() 
+                    : img.image_url;
+                } else if (img.filename) {
+                  fileName = img.filename;
+                } else {
+                  // Fallback if no image info available
+                  console.warn('Missing image information for trade', trade.trade_id);
+                  return { url: '', type: 'trade' as const };
+                }
+                
+                // Build the complete URL
+                return {
+                  url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/trades/${fileName}`,
+                  type: 'trade' as const
+                };
+              }).filter(img => img.url !== ''); // Remove any empty URLs
             }
 
             allPosts.push({
@@ -905,10 +947,10 @@ export function Dashboard() {
               title: `Trading ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : ''}`,
               description: trade.description || `Looking to trade ${trade.item_offered}${trade.item_requested ? ` for ${trade.item_requested}` : '. Contact me for offers!'}`,
               user: {
-                username: trade.username || 'Unknown User',
-                robloxUsername: trade.roblox_username,
-                rating: Math.min(5, Math.max(1, Math.floor((trade.credibility_score || 0) / 20))),
-                vouchCount: Math.floor((trade.credibility_score || 0) / 2),
+                username: userData.username || trade.username || 'Unknown User',
+                robloxUsername: userData.roblox_username || trade.roblox_username || 'Unknown',
+                rating: Math.min(5, Math.max(1, Math.floor((userData.credibility_score || trade.credibility_score || 0) / 20))),
+                vouchCount: Math.floor((userData.credibility_score || trade.credibility_score || 0) / 2),
                 verified: false, // Default to false since the trade data doesn't include verification status
                 moderator: false // Default to false since the trade data doesn't include moderator status
               },
