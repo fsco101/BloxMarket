@@ -26,9 +26,6 @@ import {
   Image as ImageIcon,
   X,
   Upload,
-  Clock,
-  CheckCircle,
-  XCircle,
   Archive,
   ArrowUp,
   ArrowDown,
@@ -41,7 +38,7 @@ interface TradingPost {
   item_offered: string;
   item_requested?: string;
   description?: string;
-  status: 'open' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
+  status: 'expired';
   created_at: string;
   updated_at?: string;
   username: string;
@@ -89,10 +86,6 @@ export function MyTradePosts() {
   ];
 
   const statuses = [
-    { value: 'open', label: 'Open', color: 'bg-green-100 text-green-800' },
-    { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'completed', label: 'Completed', color: 'bg-blue-100 text-blue-800' },
-    { value: 'cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' },
     { value: 'expired', label: 'Expired', color: 'bg-gray-100 text-gray-800' }
   ];
 
@@ -398,26 +391,7 @@ export function MyTradePosts() {
     }
   };
 
-  const handleStatusChange = async (tradeId: string, newStatus: string) => {
-    try {
-      setActionLoading(tradeId);
-      
-      await apiService.updateTradeStatus(tradeId, newStatus);
-      
-      setPosts(prev => prev.map(post => 
-        post.trade_id === tradeId 
-          ? { ...post, status: newStatus as 'open' | 'in_progress' | 'completed' | 'cancelled' | 'expired' }
-          : post
-      ));
-      
-      toast.success(`Trade status updated to ${newStatus}`);
-    } catch (error) {
-      console.error('Error updating trade status:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update trade status');
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // Removed handleStatusChange function as we no longer need status changes
 
   const openEditDialog = (post: TradingPost) => {
     setEditingPost(post);
@@ -431,21 +405,9 @@ export function MyTradePosts() {
     setIsEditDialogOpen(true);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'open':
-        return <Clock className="w-4 h-4" />;
-      case 'in_progress':
-        return <Clock className="w-4 h-4" />;
-      case 'completed':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'cancelled':
-        return <XCircle className="w-4 h-4" />;
-      case 'expired':
-        return <Archive className="w-4 h-4" />;
-      default:
-        return <Clock className="w-4 h-4" />;
-    }
+  const getStatusIcon = () => {
+    // We now only have expired status
+    return <Archive className="w-4 h-4" />;
   };
 
   const filteredPosts = posts.filter(post => {
@@ -701,7 +663,7 @@ export function MyTradePosts() {
                         </h3>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                           <Badge className={`text-xs ${statuses.find(s => s.value === post.status)?.color || 'bg-gray-100 text-gray-800'}`}>
-                            {getStatusIcon(post.status)}
+                            {getStatusIcon()}
                             <span className="ml-1">{statuses.find(s => s.value === post.status)?.label || post.status}</span>
                           </Badge>
                           <span className="flex items-center gap-1">
@@ -755,28 +717,11 @@ export function MyTradePosts() {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    {post.status === 'open' && (
-                      <Select
-                        value={post.status}
-                        onValueChange={(value) => handleStatusChange(post.trade_id, value)}
-                        disabled={actionLoading !== null}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => openEditDialog(post)}
-                      disabled={actionLoading !== null || post.status === 'completed'}
+                      disabled={actionLoading !== null}
                     >
                       <Edit className="w-4 h-4" />
                     </Button>

@@ -1,5 +1,6 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 import { shouldThrottle } from '../lib/throttle';
+import { handleRateLimit, isRateLimited } from '../lib/rateLimitHandler';
 
 class ApiService {
   private token: string | null;
@@ -83,62 +84,61 @@ class ApiService {
       // Wait before making the request to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
-    
-    const requestPromise = (async () => {
-      try {
-        const response = await fetch(url, config);
-        const contentType = response.headers.get('content-type') || '';
-        const data = contentType.includes('application/json') ? await response.json() : { error: await response.text() };
-  
-        if (!response.ok) {
-          if (response.status === 401) {
-            const errMsg = typeof data?.error === 'string' ? data.error : '';
-            const isAuthError =
-              errMsg === 'Access denied. No token provided.' ||
-              errMsg === 'Token expired' ||
-              errMsg === 'Invalid token' ||
-              errMsg === 'Token verification failed' ||
-              errMsg === 'User not found';
-  
-            if (isAuthError) {
-              // Verify once to avoid false positives during navigation
-              const ok = currentToken ? await this.verifyTokenSilently(currentToken) : false;
-              if (!ok) {
-                this.clearToken();
-                window.dispatchEvent(new CustomEvent('auth-expired'));
-                throw new Error('Session expired. Please log in again.');
-              }
-              // Token is valid; treat as access error for this endpoint
-              throw new Error(data?.error || 'Access denied');
-            }
-          }
-          if (response.status === 403) {
-            const errMsg = typeof data?.error === 'string' ? data.error : '';
-            if (errMsg === 'Account is banned' || errMsg === 'Account is deactivated') {
+
+    // Use the rate limit handler to handle retries and exponential backoff
+    const makeRequest = async () => {
+      const response = await fetch(url, config);
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : { error: await response.text() };
+
+      if (!response.ok) {
+        // Create enhanced error object to carry response data
+        const enhancedError: any = new Error(data?.error || 'API request failed');
+        enhancedError.status = response.status;
+        enhancedError.data = data;
+        enhancedError.headers = response.headers;
+        
+        if (response.status === 401) {
+          const errMsg = typeof data?.error === 'string' ? data.error : '';
+          const isAuthError =
+            errMsg === 'Access denied. No token provided.' ||
+            errMsg === 'Token expired' ||
+            errMsg === 'Invalid token' ||
+            errMsg === 'Token verification failed' ||
+            errMsg === 'User not found';
+
+          if (isAuthError) {
+            // Verify once to avoid false positives during navigation
+            const ok = currentToken ? await this.verifyTokenSilently(currentToken) : false;
+            if (!ok) {
               this.clearToken();
               window.dispatchEvent(new CustomEvent('auth-expired'));
+              throw new Error('Session expired. Please log in again.');
             }
-            // Do NOT logout on 'Admin access required'
+            // Token is valid; treat as access error for this endpoint
+            throw new Error(data?.error || 'Access denied');
           }
-          // Handle rate limiting error (429 Too Many Requests)
-          if (response.status === 429) {
-            // Get retry-after header if available
-            const retryAfter = response.headers.get('Retry-After');
-            const waitSeconds = retryAfter ? parseInt(retryAfter, 10) : 60;
-            const waitMinutes = Math.ceil(waitSeconds / 60);
-            
-            // Dispatch custom event that the UI can listen for
-            window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { 
-              detail: { retryAfter: waitSeconds } 
-            }));
-            
-            // Custom error message with wait time if available
-            throw new Error(data?.error || `Rate limit exceeded. Please wait ${waitMinutes} minute(s) before trying again.`);
-          }
-          throw new Error(data?.error || 'API request failed');
         }
-  
-        return data;
+        
+        if (response.status === 403) {
+          const errMsg = typeof data?.error === 'string' ? data.error : '';
+          if (errMsg === 'Account is banned' || errMsg === 'Account is deactivated') {
+            this.clearToken();
+            window.dispatchEvent(new CustomEvent('auth-expired'));
+          }
+          // Do NOT logout on 'Admin access required'
+        }
+        
+        throw enhancedError;
+      }
+
+      return data;
+    };
+
+    const executeRequest = async () => {
+      try {
+        // Use our rate limiting handler with exponential backoff for requests
+        return await handleRateLimit(endpoint, makeRequest, requestCategory);
       } catch (error) {
         console.error('API request error:', error);
         throw error;
@@ -148,7 +148,9 @@ class ApiService {
           this.pendingRequests.delete(requestKey);
         }
       }
-    })();
+    };
+    
+    const requestPromise = executeRequest();
     
     // Store the promise for GET requests to deduplicate
     if (isGetRequest && requestKey) {

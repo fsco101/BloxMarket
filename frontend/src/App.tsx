@@ -14,6 +14,8 @@ import { apiService } from './services/api';
 import { MyForumPosts } from './components/user/MyForumPosts';
 import { MyTradePosts } from './components/user/MyTradePosts';
 import { MyWishlist } from './components/user/MyWishlist';
+import { Toaster } from './components/Toaster';
+import { RateLimitListener } from './components/RateLimitListener';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -341,7 +343,11 @@ export default function App() {
               </ErrorBoundary>
             </main>
             
-            {/* Rate Limit Error Notification */}
+            {/* Enhanced Toast notifications */}
+            <Toaster />
+            <RateLimitListener />
+            
+            {/* Legacy Rate Limit Error Notification */}
             {rateLimitNotification.visible && (
               <div className="fixed bottom-4 right-4 z-50 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md">
                 <div className="flex items-start">
