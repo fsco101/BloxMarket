@@ -356,7 +356,7 @@ app.use('*', (req, res) => {
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🍃 Database: ${MONGODB_URI.includes('localhost') ? 'Local MongoDB' : 'Remote MongoDB'}`);
+      console.log(`🍃 Database: ${MONGODB_URI.includes('localhost') ? 'Local MongoDB' : (MONGODB_URI.includes('mongodb.net') ? 'MongoDB Atlas' : 'Remote MongoDB')}`);
       console.log(`💬 Socket.IO: Enabled for real-time messaging`);
     });
   } catch (error) {
@@ -365,7 +365,7 @@ app.use('*', (req, res) => {
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} (Firebase auth unavailable)`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🍃 Database: ${MONGODB_URI.includes('localhost') ? 'Local MongoDB' : 'Remote MongoDB'}`);
+      console.log(`🍃 Database: ${MONGODB_URI.includes('localhost') ? 'Local MongoDB' : (MONGODB_URI.includes('mongodb.net') ? 'MongoDB Atlas' : 'Remote MongoDB')}`);
       console.log(`💬 Socket.IO: Enabled for real-time messaging`);
     });
   }

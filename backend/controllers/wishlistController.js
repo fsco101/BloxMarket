@@ -10,20 +10,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure multer storage for wishlist images
-const wishlistStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, '../uploads/wishlists');
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'wishlist-' + uniqueSuffix + ext);
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { cloudinary } from '../config/cloudinary.js';
+
+// Configure multer storage for wishlist images using Cloudinary
+const wishlistStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bloxmarket/wishlists',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp']
   }
 });
 
@@ -323,6 +318,7 @@ class WishlistController {
         images = req.files.map(file => ({
           filename: file.filename,
           originalName: file.originalname,
+          image_url: file.path,
           uploadedAt: new Date()
         }));
       }
@@ -1262,17 +1258,8 @@ class WishlistController {
       
       // Save wishlist
       await wishlist.save();
-      
-      // Delete the file from filesystem
-      const imagePath = path.join(__dirname, '../uploads/wishlists', filename);
-      try {
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
-      } catch (err) {
-        console.error('Error deleting image file:', err);
-        // Continue even if file deletion fails
-      }
+      // Note: Cloudinary image deletion logic can be added here if needed,
+      // or handled automatically if we don't need to save space.
       
       res.json({
         success: true,

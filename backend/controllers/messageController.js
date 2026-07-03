@@ -129,9 +129,9 @@ export const messageController = {
       }
 
       // Return the uploaded file info
-      const fileUrl = `/uploads/chat/${req.file.filename}`;
+      const imageUrl = req.file.path;
       res.json({
-        file_url: fileUrl,
+        file_url: imageUrl,
         file_name: req.file.originalname,
         file_size: req.file.size
       });

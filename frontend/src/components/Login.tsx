@@ -109,22 +109,22 @@ export function Login() {
   };
 
   return (
-    <Card className="backdrop-blur-sm bg-background/95 shadow-xl border border-border/50">
-      <CardHeader>
-        <CardTitle>Welcome Back</CardTitle>
-        <CardDescription>
+    <Card className="bg-transparent border-none shadow-none">
+      <CardHeader className="px-0 pt-0">
+        <CardTitle className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight transition-colors">Welcome Back</CardTitle>
+        <CardDescription className="text-slate-600 dark:text-slate-400 transition-colors">
           Sign in to your BloxMarket account
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleLogin} className="space-y-4">
+      <CardContent className="px-0 pb-0">
+        <form onSubmit={handleLogin} className="space-y-6">
           {error && (
-            <Alert className="border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+            <Alert className="border-red-500/30 bg-red-500/10 text-red-400">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="username">Username or Email</Label>
+          <div className="space-y-3">
+            <Label htmlFor="username" className="text-slate-700 dark:text-slate-300 font-medium ml-1 transition-colors">Username or Email</Label>
             <Input
               id="username"
               name="username"
@@ -134,10 +134,11 @@ export function Login() {
               onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
               disabled={isLoading}
               required
+              className="h-12 px-4 bg-white/60 dark:bg-black/40 border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-600 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-cyan-500 dark:focus-visible:border-cyan-400 focus-visible:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all rounded-xl text-base"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+          <div className="space-y-3">
+            <Label htmlFor="password" className="text-slate-700 dark:text-slate-300 font-medium ml-1 transition-colors">Password</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -148,10 +149,11 @@ export function Login() {
                 onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
                 disabled={isLoading}
                 required
+                className="h-12 px-4 bg-white/60 dark:bg-black/40 border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-600 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-cyan-500 dark:focus-visible:border-cyan-400 focus-visible:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all rounded-xl pr-12 text-base"
               />
               <button
                 type="button"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500"
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                 onClick={() => setShowPassword(!showPassword)}
                 tabIndex={-1}
               >
@@ -162,16 +164,21 @@ export function Login() {
                 )}
               </button>
             </div>
+            <div className="flex justify-end">
+              <a href="#" className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors">
+                Forgot password?
+              </a>
+            </div>
           </div>
 
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+            className="w-full bg-cyan-600 hover:bg-cyan-500 dark:bg-cyan-500 dark:hover:bg-cyan-400 text-white dark:text-slate-900 font-bold rounded-xl py-6 shadow-[0_0_20px_rgba(8,145,178,0.3)] dark:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all text-base mt-2"
             disabled={isLoading}
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 Signing In...
               </>
             ) : (

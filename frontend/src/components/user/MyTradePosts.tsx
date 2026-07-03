@@ -11,11 +11,11 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { apiService } from '../../services/api';
 import { alertService } from '../../services/alertService';
 import { toast } from 'sonner';
-import { 
-  ShoppingCart, 
-  Edit, 
-  Trash2, 
-  Plus, 
+import {
+  ShoppingCart,
+  Edit,
+  Trash2,
+  Plus,
   Search,
   Calendar,
   DollarSign,
@@ -61,7 +61,7 @@ export function MyTradePosts() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<TradingPost | null>(null);
-  
+
   // Form states
   const [newPost, setNewPost] = useState({
     itemOffered: '',
@@ -73,7 +73,7 @@ export function MyTradePosts() {
     itemRequested: '',
     description: ''
   });
-  
+
   // Image upload states
   const [newPostImages, setNewPostImages] = useState<File[]>([]);
   const [newPostImagePreviews, setNewPostImagePreviews] = useState<string[]>([]);
@@ -94,7 +94,7 @@ export function MyTradePosts() {
     try {
       setLoading(true);
       setError('');
-      
+
       // Get current user first
       const currentUser = await apiService.getCurrentUser();
       if (!currentUser) {
@@ -106,12 +106,12 @@ export function MyTradePosts() {
 
       // Try to get user-specific trade posts with multiple fallback strategies
       let myTrades: TradingPost[] = [];
-      
+
       try {
         // Primary: Use dedicated user trades endpoint
         console.log('Attempting to fetch user-specific trades...');
         const userTradesResponse = await apiService.getUserTrades(currentUser.id);
-        
+
         // Handle the response and map to our interface
         if (Array.isArray(userTradesResponse)) {
           myTrades = userTradesResponse.map((trade: any) => ({
@@ -130,16 +130,16 @@ export function MyTradePosts() {
             comment_count: trade.comment_count || trade.commentCount || 0
           }));
         }
-        
+
         console.log('Successfully fetched user trades:', myTrades.length);
       } catch (userEndpointError) {
         console.log('User-specific endpoint failed, trying filtered approach:', userEndpointError);
-        
+
         try {
           // Fallback: Get all trades and filter client-side
           const allTradesResponse = await apiService.getTrades({ limit: 1000 });
           let allTrades = [];
-          
+
           // Handle different response formats
           if (allTradesResponse && Array.isArray(allTradesResponse.trades)) {
             allTrades = allTradesResponse.trades;
@@ -148,7 +148,7 @@ export function MyTradePosts() {
           } else if (allTradesResponse && allTradesResponse.data && Array.isArray(allTradesResponse.data)) {
             allTrades = allTradesResponse.data;
           }
-          
+
           // Map and filter trades for current user
           myTrades = allTrades
             .map((trade: any) => ({
@@ -166,33 +166,34 @@ export function MyTradePosts() {
               downvotes: trade.downvotes || 0,
               comment_count: trade.comment_count || trade.commentCount || 0
             }))
-            .filter(trade => {
+
+            .filter((trade: any) => {
               // More robust filtering with multiple ID checks
-              const matchesId = trade.user_id === currentUser.id || 
-                              trade.user_id === currentUser._id;
+              const matchesId = trade.user_id === currentUser.id ||
+                trade.user_id === currentUser._id;
               const matchesUsername = trade.username === currentUser.username;
-              
+
               return matchesId || matchesUsername;
             });
-            
+
           console.log('Client-side filtered trades:', myTrades.length);
         } catch (fallbackError) {
           console.error('All fallback methods failed:', fallbackError);
           throw new Error('Unable to load your trade posts. Please try again later.');
         }
       }
-      
+
       // Sort trades by creation date (newest first) for better UX
-      const sortedTrades = myTrades.sort((a, b) => 
+      const sortedTrades = myTrades.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-      
+
       setPosts(sortedTrades || []);
-      
+
       if (sortedTrades.length === 0) {
         console.log('No trades found for current user');
       }
-      
+
     } catch (err) {
       console.error('Error loading my trading posts:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load your trading posts';
@@ -265,25 +266,25 @@ export function MyTradePosts() {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newPost.itemOffered.trim()) {
       toast.error('Item offered is required');
       return;
     }
-    
+
     try {
       setActionLoading('create');
-      
+
       const tradeData = {
         itemOffered: newPost.itemOffered,
         itemRequested: newPost.itemRequested || '',
         description: newPost.description || ''
       };
-      
+
       console.log('Creating trade with images:', newPostImages.length);
-      
+
       const createdTrade = await apiService.createTrade(tradeData, newPostImages);
-      
+
       setIsCreateDialogOpen(false);
       setNewPost({
         itemOffered: '',
@@ -292,7 +293,7 @@ export function MyTradePosts() {
       });
       setNewPostImages([]);
       setNewPostImagePreviews([]);
-      
+
       // Add the new trade to the beginning of the list (newest first)
       if (createdTrade) {
         setPosts(prev => [createdTrade, ...prev]);
@@ -300,7 +301,7 @@ export function MyTradePosts() {
         // If the API doesn't return the created trade, reload all trades
         await loadMyTrades();
       }
-      
+
       toast.success('Trade post created successfully! 🎉', {
         description: 'Your trade has been posted and is now visible to other users.'
       });
@@ -317,27 +318,27 @@ export function MyTradePosts() {
 
   const handleEditPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!editingPost) return;
-    
+
     if (!editPost.itemOffered.trim()) {
       toast.error('Item offered is required');
       return;
     }
-    
+
     try {
       setActionLoading('edit');
-      
+
       const tradeData = {
         itemOffered: editPost.itemOffered,
         itemRequested: editPost.itemRequested || '',
         description: editPost.description || ''
       };
-      
+
       console.log('Updating trade with images:', editPostImages.length);
-      
+
       const updatedTrade = await apiService.updateTrade(editingPost.trade_id, tradeData, editPostImages);
-      
+
       setIsEditDialogOpen(false);
       setEditingPost(null);
       setEditPost({
@@ -347,17 +348,17 @@ export function MyTradePosts() {
       });
       setEditPostImages([]);
       setEditPostImagePreviews([]);
-      
+
       // Update the trade in the list
       if (updatedTrade) {
-        setPosts(prev => prev.map(post => 
+        setPosts(prev => prev.map(post =>
           post.trade_id === editingPost.trade_id ? updatedTrade : post
         ));
       } else {
         // If the API doesn't return the updated trade, reload all trades
         await loadMyTrades();
       }
-      
+
       toast.success('Trade post updated successfully! 🎉', {
         description: 'Your trade has been updated and is now visible to other users.'
       });
@@ -379,16 +380,16 @@ export function MyTradePosts() {
       'Delete',
       'Cancel'
     );
-    
+
     if (!confirmed) {
       return;
     }
-    
+
     try {
       setActionLoading(tradeId);
-      
+
       await apiService.deleteTrade(tradeId);
-      
+
       setPosts(prev => prev.filter(post => post.trade_id !== tradeId));
       toast.success('Trading post deleted successfully!');
     } catch (error) {
@@ -421,9 +422,9 @@ export function MyTradePosts() {
   const filteredPosts = posts.filter(post => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = searchTerm === '' ||
-                         post.item_offered.toLowerCase().includes(searchLower) ||
-                         (post.item_requested && post.item_requested.toLowerCase().includes(searchLower)) ||
-                         (post.description && post.description.toLowerCase().includes(searchLower));
+      post.item_offered.toLowerCase().includes(searchLower) ||
+      (post.item_requested && post.item_requested.toLowerCase().includes(searchLower)) ||
+      (post.description && post.description.toLowerCase().includes(searchLower));
     const matchesType = typeFilter === 'all' || post.status === typeFilter;
     const matchesStatus = statusFilter === 'all' || post.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
@@ -449,7 +450,7 @@ export function MyTradePosts() {
           </h1>
           <p className="text-muted-foreground">Manage your trading posts and offers</p>
         </div>
-        
+
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700">
@@ -464,7 +465,7 @@ export function MyTradePosts() {
                 Fill out the details for your trade listing
               </DialogDescription>
             </DialogHeader>
-            
+
             <form onSubmit={handleCreatePost} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="new-offered">What you're offering *</Label>
@@ -476,7 +477,7 @@ export function MyTradePosts() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="new-requested">What you want (optional)</Label>
                 <Input
@@ -486,7 +487,7 @@ export function MyTradePosts() {
                   onChange={(e) => setNewPost(prev => ({ ...prev, itemRequested: e.target.value }))}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="new-description">Description (optional)</Label>
                 <Textarea
@@ -497,11 +498,11 @@ export function MyTradePosts() {
                   className="min-h-[100px]"
                 />
               </div>
-              
+
               {/* Image Upload Section - Match TradingHub style */}
               <div className="space-y-2">
                 <Label>Images (optional - up to 5 images)</Label>
-                <div 
+                <div
                   className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-colors"
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -535,14 +536,13 @@ export function MyTradePosts() {
                   />
                   <label
                     htmlFor="new-trade-images"
-                    className={`cursor-pointer flex flex-col items-center gap-2 ${
-                      newPostImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className={`cursor-pointer flex flex-col items-center gap-2 ${newPostImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                   >
                     <Upload className="w-8 h-8 text-gray-400" />
                     <span className="text-sm text-gray-600 dark:text-gray-300">
-                      {newPostImages.length >= 5 
-                        ? 'Maximum 5 images reached' 
+                      {newPostImages.length >= 5
+                        ? 'Maximum 5 images reached'
                         : 'Click to upload images or drag and drop'
                       }
                     </span>
@@ -581,7 +581,7 @@ export function MyTradePosts() {
                   </div>
                 )}
               </div>
-              
+
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={actionLoading === 'create'}>
                   Cancel
@@ -682,7 +682,7 @@ export function MyTradePosts() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Offering:</p>
@@ -695,20 +695,20 @@ export function MyTradePosts() {
                         </div>
                       )}
                     </div>
-                    
+
                     {post.description && (
                       <p className="text-muted-foreground mb-3 line-clamp-2">
                         {post.description}
                       </p>
                     )}
-                    
+
                     {post.images && post.images.length > 0 && (
                       <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
                         <ImageIcon className="w-4 h-4" />
                         {post.images.length} image{post.images.length !== 1 ? 's' : ''}
                       </div>
                     )}
-                    
+
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <ArrowUp className="w-4 h-4 text-green-600" />
@@ -724,7 +724,7 @@ export function MyTradePosts() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
@@ -760,7 +760,7 @@ export function MyTradePosts() {
             <h3 className="text-lg font-semibold mb-2">No Trading Posts Found</h3>
             <p className="text-muted-foreground mb-4">
               {searchTerm || typeFilter !== 'all' || statusFilter !== 'all'
-                ? 'No posts match your current filters.' 
+                ? 'No posts match your current filters.'
                 : "You haven't created any trading posts yet."}
             </p>
             {!searchTerm && typeFilter === 'all' && statusFilter === 'all' && (
@@ -782,7 +782,7 @@ export function MyTradePosts() {
               Update the details for your trade listing
             </DialogDescription>
           </DialogHeader>
-          
+
           <form onSubmit={handleEditPost} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="edit-offered">What you're offering *</Label>
@@ -794,7 +794,7 @@ export function MyTradePosts() {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="edit-requested">What you want (optional)</Label>
               <Input
@@ -804,7 +804,7 @@ export function MyTradePosts() {
                 onChange={(e) => setEditPost(prev => ({ ...prev, itemRequested: e.target.value }))}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="edit-description">Description (optional)</Label>
               <Textarea
@@ -815,7 +815,7 @@ export function MyTradePosts() {
                 className="min-h-[100px]"
               />
             </div>
-            
+
             {/* Current Images */}
             {editingPost?.images && editingPost.images.length > 0 && (
               <div className="space-y-2">
@@ -833,7 +833,7 @@ export function MyTradePosts() {
                         imageUrl = `${baseUrl}/api/uploads/trades/${imageUrl}`;
                       }
                     }
-                    
+
                     return (
                       <div key={index} className="relative">
                         <img
@@ -852,11 +852,11 @@ export function MyTradePosts() {
                 </div>
               </div>
             )}
-            
+
             {/* New Image Upload - Match TradingHub style */}
             <div className="space-y-2">
               <Label>Add New Images (optional - up to 5 images total)</Label>
-              <div 
+              <div
                 className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 text-center transition-colors"
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -890,14 +890,13 @@ export function MyTradePosts() {
                 />
                 <label
                   htmlFor="edit-trade-images"
-                  className={`cursor-pointer flex flex-col items-center gap-2 ${
-                    editPostImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
+                  className={`cursor-pointer flex flex-col items-center gap-2 ${editPostImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                 >
                   <Upload className="w-8 h-8 text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-300">
-                    {editPostImages.length >= 5 
-                      ? 'Maximum 5 images reached' 
+                    {editPostImages.length >= 5
+                      ? 'Maximum 5 images reached'
                       : 'Click to upload additional images or drag and drop'
                     }
                   </span>
@@ -906,7 +905,7 @@ export function MyTradePosts() {
                   </span>
                 </label>
               </div>
-              
+
               {editPostImagePreviews.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <div className="flex items-center gap-2">
@@ -935,7 +934,7 @@ export function MyTradePosts() {
                 </div>
               )}
             </div>
-            
+
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={actionLoading === 'edit'}>
                 Cancel

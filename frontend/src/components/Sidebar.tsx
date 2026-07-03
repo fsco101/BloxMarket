@@ -107,10 +107,10 @@ export function Sidebar() {
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   // Debug logging to help identify issues
@@ -131,7 +131,7 @@ export function Sidebar() {
     // Sticky sidebar container - stays in document flow but sticks to viewport top when scrolling
     // Uses position: sticky with top: 0 for modern, clean sticky behavior
     // Width is consistent across all screen sizes for better layout predictability
-    <div className="sticky top-0 w-64 h-screen bg-background border-r border-border flex flex-col flex-shrink-0 shadow-lg z-20">
+    <div className="sticky top-0 w-64 h-screen bg-white border-r border-slate-200 flex flex-col flex-shrink-0 shadow-sm z-20">
       {/* 
         Sticky Positioning Explanation:
         - position: sticky keeps the sidebar in the normal document flow
@@ -191,7 +191,7 @@ export function Sidebar() {
               className={`w-full justify-start transition-smooth group relative overflow-hidden hover-lift click-scale ${
                 currentPage === id
                   ? 'bg-gradient-to-r from-primary to-info text-white shadow-lg border-0 hover:shadow-xl hover:scale-[1.02] animate-scaleIn'
-                  : 'bg-card hover:bg-accent border border-border hover:border-primary/50 hover:shadow-md text-foreground hover-glow'
+                  : 'bg-white hover:bg-slate-50 border border-slate-200 hover:border-primary/50 hover:shadow-md text-slate-700 hover:text-slate-900 hover-glow'
               } ${
                 id === 'messenger' && totalUnreadCount > 0 && currentPage !== 'messenger'
                   ? 'animate-pulse border-blue-500/50 shadow-blue-500/25 shadow-lg hover-scale'
@@ -236,7 +236,7 @@ export function Sidebar() {
                 className={`w-full justify-start transition-all duration-300 group relative overflow-hidden ${
                   isProfilePage
                     ? 'bg-gradient-to-r from-success to-green-500 text-white shadow-lg border-0 hover:shadow-xl hover:scale-[1.02]'
-                    : 'bg-card hover:bg-accent border border-border hover:border-success/50 hover:shadow-md text-foreground'
+                    : 'bg-white hover:bg-slate-50 border border-slate-200 hover:border-success/50 hover:shadow-md text-slate-700 hover:text-slate-900'
                 }`}
               >
                 <div className={`absolute inset-0 transition-opacity duration-300 ${
@@ -284,7 +284,7 @@ export function Sidebar() {
                   className={`w-full justify-start transition-all duration-300 group relative overflow-hidden ${
                     currentPage === 'admin'
                       ? 'bg-gradient-to-r from-warning to-orange-500 text-white shadow-lg border-0 hover:shadow-xl hover:scale-[1.02]'
-                      : 'bg-card hover:bg-accent border border-border hover:border-warning/50 hover:shadow-md text-foreground'
+                      : 'bg-white hover:bg-slate-50 border border-slate-200 hover:border-warning/50 hover:shadow-md text-slate-700 hover:text-slate-900'
                   }`}
                 >
                   <div className={`absolute inset-0 transition-opacity duration-300 ${
@@ -328,7 +328,7 @@ export function Sidebar() {
       </nav>
 
       {/* Sidebar Footer - Fixed height bottom section */}
-  <div className="p-4 border-t border-border space-y-4 flex-shrink-0 bg-muted/10">
+  <div className="p-4 border-t border-slate-200 space-y-4 flex-shrink-0 bg-slate-50">
         {/* 
           Footer Section:
           - flex-shrink-0 prevents this section from compressing
@@ -360,7 +360,7 @@ export function Sidebar() {
         {/* Enhanced Logout Button */}
         <Button
           variant="ghost"
-          className="w-full justify-start transition-spring group relative overflow-hidden bg-card hover:bg-accent border border-border hover:border-destructive/50 hover:shadow-md text-foreground hover-lift click-scale"
+          className="w-full justify-start transition-spring group relative overflow-hidden bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 hover:shadow-md text-slate-900 hover-lift click-scale"
           onClick={logout}
         >
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-r from-red-500/5 to-red-600/5 transition-all duration-300"></div>

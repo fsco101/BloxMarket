@@ -52,7 +52,7 @@ export interface PostModalPost {
     credibility_score?: number;
   };
   timestamp: string;
-  images?: Array<{ url: string; type: 'trade' | 'forum' | 'event' }>;
+  images?: Array<{ url: string; type: 'trade' | 'forum' | 'event' | 'wishlist' }>;
   comments?: number;
   upvotes?: number;
   downvotes?: number;
@@ -107,7 +107,7 @@ function ImageViewer({
   onPrevious,
   onSetIndex
 }: {
-  images: Array<{ url: string; type: 'trade' | 'forum' | 'event' }>;
+  images: Array<{ url: string; type: 'trade' | 'forum' | 'event' | 'wishlist' }>;
   currentIndex: number;
   onNext: () => void;
   onPrevious: () => void;
@@ -257,11 +257,11 @@ const getAvatarUrl = (avatarUrl?: string) => {
   }
 
   if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-    return `http://localhost:5000${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
   }
 
   console.log('getAvatarUrl: Processing filename:', avatarUrl);
-  const fullUrl = `http://localhost:5000/api/uploads/avatars/${avatarUrl}`;
+  const fullUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/avatars/${avatarUrl}`;
   console.log('getAvatarUrl: Generated URL:', fullUrl);
   return fullUrl;
 };

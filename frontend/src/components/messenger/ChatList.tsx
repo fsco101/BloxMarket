@@ -61,11 +61,11 @@ export const ChatList: React.FC<ChatListProps> = ({
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
     // Assume it's just a filename from backend/uploads/avatars/
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   // Handle right-click context menu

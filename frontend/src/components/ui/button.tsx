@@ -97,7 +97,7 @@ import { cn } from "./utils";
   }
 */
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-invalid:outline-destructive aria-invalid:outline-2 active:scale-[0.96] transform hover:scale-[1.02] shadow-sm hover:shadow-lg backdrop-blur-sm border-0 relative overflow-hidden group",
   {
     variants: {

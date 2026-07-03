@@ -52,7 +52,7 @@ const transformEventToPostModal = (event: Event): PostModalPost => {
       credibility_score: 0 // Events don't have credibility scores
     },
     images: event.images?.map(img => ({
-      url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
+      url: img.path?.startsWith('http') ? img.path : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${img.filename}`,
       type: 'event' as const
     })) || [],
     upvotes: event.upvotes || 0,
@@ -80,11 +80,11 @@ const getAvatarUrl = (avatarUrl?: string) => {
   }
 
   if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-    return `http://localhost:5000${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
   }
 
   console.log('getAvatarUrl: Processing filename:', avatarUrl);
-  const fullUrl = `http://localhost:5000/api/uploads/avatars/${avatarUrl}`;
+  const fullUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/avatars/${avatarUrl}`;
   console.log('getAvatarUrl: Generated URL:', fullUrl);
   return fullUrl;
 };
@@ -749,7 +749,7 @@ export function EventsGiveaways() {
             
             <div className="relative aspect-video bg-black flex items-center justify-center">
               <ImageDisplay
-                src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${currentImage.filename}`}
+                src={currentImage.path?.startsWith('http') ? currentImage.path : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${currentImage.filename}`}
                 alt={currentImage.originalName || `Event image ${currentIndex + 1}`}
                 className="max-w-full max-h-full object-contain"
               />
@@ -1389,7 +1389,7 @@ export function EventsGiveaways() {
                       handleEventImageClick(event.images!, 0);
                     }}>
                       <ImageDisplay
-                        src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${event.images[0].filename}`}
+                        src={event.images[0].path?.startsWith('http') ? event.images[0].path : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/event/${event.images[0].filename}`}
                         alt={`${event.title} - Event image`}
                         className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
                       />

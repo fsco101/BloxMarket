@@ -124,27 +124,11 @@ export const forumController = {
       const uploadedFiles = req.files;
 
       if (!title || !content) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Title and content are required' });
       }
 
       const validCategories = ['trading_tips', 'scammer_reports', 'game_updates', 'general'];
       if (category && !validCategories.includes(category)) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Invalid category' });
       }
 
@@ -181,15 +165,6 @@ export const forumController = {
     } catch (error) {
       console.error('Create forum post error:', error);
       
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
-      
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });
       }
@@ -217,14 +192,6 @@ export const forumController = {
       }
 
       if (!title || !content) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Title and content are required' });
       }
 
@@ -235,27 +202,11 @@ export const forumController = {
       }
 
       if (!post.user_id.equals(userId)) {
-        // Clean up uploaded files if not authorized
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(403).json({ error: 'Not authorized to update this post' });
       }
 
       const validCategories = ['trading_tips', 'scammer_reports', 'game_updates', 'general'];
       if (category && !validCategories.includes(category)) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Invalid category' });
       }
 
@@ -304,15 +255,6 @@ export const forumController = {
 
     } catch (error) {
       console.error('Update forum post error:', error);
-      
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });

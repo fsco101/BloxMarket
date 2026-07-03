@@ -7,18 +7,15 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Configure multer for forum image uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = './uploads/forum';
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'forum-' + uniqueSuffix + path.extname(file.originalname));
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { cloudinary } from '../config/cloudinary.js';
+
+// Configure multer for forum image uploads using Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bloxmarket/forum',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp']
   }
 });
 

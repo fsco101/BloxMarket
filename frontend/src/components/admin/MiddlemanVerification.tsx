@@ -100,7 +100,7 @@ export function MiddlemanVerification() {
   const viewFaceVerificationImage = async (filename: string) => {
     try {
       const token = localStorage.getItem('bloxmarket-token');
-      const response = await fetch(`http://localhost:5000/api/verification/face-images/${filename}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/verification/face-images/${filename}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -154,10 +154,10 @@ export function MiddlemanVerification() {
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   // Check if jQuery and DataTables are loaded
@@ -543,7 +543,7 @@ export function MiddlemanVerification() {
     try {
       // Fetch the document with authentication
       const token = localStorage.getItem('bloxmarket-token');
-      const response = await fetch(`http://localhost:5000/api/verification/documents/${documentId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/verification/documents/${documentId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -990,7 +990,7 @@ export function MiddlemanVerification() {
                           <div className="mt-2 mb-3">
                             <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
                               <img
-                                src={`http://localhost:5000/uploads/middlemanface/${doc.filename}`}
+                                src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/middlemanface/${doc.filename}`}
                                 alt="Face Verification Photo"
                                 className="w-full h-full object-cover"
                                 onLoad={() => {
@@ -1002,7 +1002,7 @@ export function MiddlemanVerification() {
                                   
                                   try {
                                     const token = localStorage.getItem('bloxmarket-token');
-                                    const response = await fetch(`http://localhost:5000/api/verification/face-images/${doc.filename}`, {
+                                    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/verification/face-images/${doc.filename}`, {
                                       headers: {
                                         'Authorization': `Bearer ${token}`
                                       }

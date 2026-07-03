@@ -149,18 +149,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
     // Assume it's just a filename from backend/uploads/avatars/
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   // Helper to build absolute URL for uploaded files (images)
   const getFileUrl = (fileUrl: string | undefined) => {
     if (!fileUrl) return undefined;
     if (fileUrl.startsWith('/uploads/')) {
-      return `http://localhost:5000${fileUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${fileUrl}`;
     }
     return fileUrl;
   };
@@ -897,11 +897,11 @@ const ProfileModal: React.FC<{
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
     // Assume it's just a filename from backend/uploads/avatars/
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   return (
@@ -1042,7 +1042,7 @@ const ImageViewerModal: React.FC<{
   const getFileUrl = (fileUrl: string | undefined) => {
     if (!fileUrl) return undefined;
     if (fileUrl.startsWith('/uploads/')) {
-      return `http://localhost:5000${fileUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${fileUrl}`;
     }
     return fileUrl;
   };
@@ -1259,11 +1259,11 @@ const AddUserModal: React.FC<{
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
     // Assume it's just a filename from backend/uploads/avatars/
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   if (!isOpen) return null;
@@ -1451,11 +1451,11 @@ const ViewMembersModal: React.FC<{
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
     // Assume it's just a filename from backend/uploads/avatars/
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   if (!isOpen) return null;

@@ -111,10 +111,10 @@ export function ProfileView() {
     }
 
     if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-      return `http://localhost:5000${avatarUrl}`;
+      return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
     }
 
-    return `http://localhost:5000/uploads/avatars/${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/avatars/${avatarUrl}`;
   };
 
   const getRoleBadge = (role: string) => {

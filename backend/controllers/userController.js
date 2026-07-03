@@ -242,23 +242,11 @@ export const userController = {
 
       const user = await User.findById(userId);
       if (!user) {
-        // Clean up uploaded file if user not found
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
         return res.status(404).json({ error: 'User not found' });
       }
 
-      // Delete old avatar if exists
-      if (user.avatar_url) {
-        const oldAvatarPath = user.avatar_url.replace('/api/uploads/avatars/', './uploads/avatars/');
-        if (fs.existsSync(oldAvatarPath)) {
-          fs.unlinkSync(oldAvatarPath);
-        }
-      }
-
       // Update user with new avatar URL
-      user.avatar_url = `/api/uploads/avatars/${req.file.filename}`;
+      user.avatar_url = req.file.path;
       await user.save();
 
       res.json({
@@ -268,11 +256,6 @@ export const userController = {
 
     } catch (error) {
       console.error('Upload avatar error:', error);
-      
-      // Clean up uploaded file on error
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'Avatar file too large. Maximum 2MB allowed.' });

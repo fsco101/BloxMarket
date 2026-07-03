@@ -449,15 +449,7 @@ export default function App() {
           <AuthContext.Provider value={{ user, login, logout, isLoggedIn, isLoading, isLoggingOut }}>
             <ChatNotificationProvider>
               <AppContext.Provider value={{ currentPage, setCurrentPage }}>
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-foreground flex flex-col relative overflow-hidden transition-smooth">
-              {/* Enhanced dynamic background particles */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-20 left-10 w-96 h-96 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full animate-float hover-glow"></div>
-                <div className="absolute top-40 right-20 w-64 h-64 bg-gradient-to-br from-pink-500/5 to-red-500/5 rounded-full animate-float hover-glow" style={{ animationDelay: '1s' }}></div>
-                <div className="absolute bottom-32 left-1/3 w-80 h-80 bg-gradient-to-br from-green-500/5 to-teal-500/5 rounded-full animate-float hover-glow" style={{ animationDelay: '2s' }}></div>
-                <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 rounded-full animate-float hover-glow" style={{ animationDelay: '3s' }}></div>
-              </div>
-              
+            <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col relative overflow-hidden transition-smooth">
               <Header />
               {/* Main layout container with flex for sidebar and content; already offset by pt-16 for header */}
               <div className="flex h-screen pt-16">
@@ -474,16 +466,18 @@ export default function App() {
                     - overflow-x-hidden prevents horizontal scrollbar
                     - Custom scrollbar styling for consistency with design
                   */}
-                  <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800 hover:scrollbar-thumb-slate-500 glass-dark transition-smooth">
-                    <div className="animate-fadeIn transition-smooth">
-                      <ErrorBoundary>
-                        {renderCurrentPage()}
-                      </ErrorBoundary>
+                  <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 hover:scrollbar-thumb-slate-400 transition-smooth">
+                    <div className="animate-fadeIn transition-smooth min-h-full flex flex-col">
+                      <div className="flex-1">
+                        <ErrorBoundary>
+                          {renderCurrentPage()}
+                        </ErrorBoundary>
+                      </div>
+                      <Footer />
                     </div>
                   </div>
                 </main>
               </div>
-              <Footer />
 
               {/* Enhanced Toast notifications */}
               <Toaster />

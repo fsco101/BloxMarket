@@ -90,18 +90,6 @@ export const tradeController = {
 
       // Validate required fields - only itemOffered is required
       if (!itemOffered) {
-        // Clean up uploaded files
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            try {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
-            } catch (err) {
-              console.error('Error deleting file:', err);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Item offered is required' });
       }
 
@@ -110,7 +98,7 @@ export const tradeController = {
       if (uploadedFiles && uploadedFiles.length > 0) {
         uploadedFiles.forEach(file => {
           images.push({
-            image_url: `/uploads/trades/${file.filename}`,
+            image_url: file.path,
             filename: file.filename,
             originalName: file.originalname,
             path: file.path,
@@ -175,20 +163,6 @@ export const tradeController = {
 
     } catch (error) {
       console.error('Create trade error:', error);
-      
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          try {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (err) {
-            console.error('Error deleting file during cleanup:', err);
-          }
-        });
-      }
-      
       res.status(500).json({ error: 'Failed to create trade' });
     }
   },
@@ -268,18 +242,6 @@ export const tradeController = {
 
       // Check if user owns the trade
       if (trade.user_id.toString() !== userId) {
-        // Clean up uploaded files if user doesn't own the trade
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            try {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
-            } catch (err) {
-              console.error('Error deleting file:', err);
-            }
-          });
-        }
         return res.status(403).json({ error: 'You can only update your own trades' });
       }
 
@@ -292,24 +254,10 @@ export const tradeController = {
 
       // Handle image updates - replace existing images with new ones
       if (uploadedFiles && uploadedFiles.length > 0) {
-        // Delete existing images from filesystem
-        if (trade.images && trade.images.length > 0) {
-          trade.images.forEach(image => {
-            try {
-              if (fs.existsSync(image.path)) {
-                fs.unlinkSync(image.path);
-              }
-            } catch (err) {
-              console.error('Error deleting old image file:', err);
-            }
-          });
-        }
-
-        // Process new uploaded images
         const images = [];
         uploadedFiles.forEach(file => {
           images.push({
-            image_url: `/uploads/trades/${file.filename}`,
+            image_url: file.path,
             filename: file.filename,
             originalName: file.originalname,
             path: file.path,
@@ -365,20 +313,6 @@ export const tradeController = {
 
     } catch (error) {
       console.error('Update trade error:', error);
-      
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          try {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (err) {
-            console.error('Error deleting file during cleanup:', err);
-          }
-        });
-      }
-      
       res.status(500).json({ error: 'Failed to update trade' });
     }
   },

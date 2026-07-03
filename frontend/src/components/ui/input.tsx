@@ -15,12 +15,12 @@ const inputVariants = cva(
         xl: "h-14 px-5 py-4 text-lg file:h-10 file:text-base rounded-xl",
       },
       variant: {
-        default: "bg-background border-border/50 hover:border-border/70 focus:border-ring focus:shadow-lg focus:shadow-ring/20 hover-glow",
-        filled: "bg-muted/30 border-transparent hover:bg-muted/50 focus:bg-background focus:border-ring/50 focus:shadow-lg focus:shadow-ring/10",
-        ghost: "bg-transparent border-transparent hover:bg-muted/30 focus:bg-background/50 focus:border-ring/50 focus:shadow-md",
-        flushed: "bg-transparent border-0 border-b-2 border-border rounded-none px-0 focus:border-b-ring focus:shadow-none hover:border-b-border/70 transition-colors",
-        glass: "bg-white/10 backdrop-blur-md border border-white/20 text-foreground placeholder:text-white/70 focus:bg-white/20 focus:border-white/40 focus:shadow-xl focus:shadow-white/10",
-        neon: "bg-transparent border-2 border-primary/50 focus:border-primary focus:shadow-lg focus:shadow-primary/30 hover:border-primary/70 animate-pulse-subtle",
+        default: "bg-white/60 dark:bg-black/40 border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-600 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-violet-500 dark:focus-visible:border-violet-400 focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.15)] transition-all",
+        filled: "bg-muted/30 border-transparent hover:bg-muted/50 focus:bg-background focus-visible:border-violet-500 focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.15)]",
+        ghost: "bg-transparent border-transparent hover:bg-muted/30 focus:bg-background/50 focus-visible:border-violet-500 focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.15)]",
+        flushed: "bg-transparent border-0 border-b-2 border-border rounded-none px-0 focus:border-b-violet-500 focus:shadow-none hover:border-b-border/70 transition-colors",
+        glass: "bg-white/10 backdrop-blur-md border border-white/20 text-foreground placeholder:text-white/70 focus:bg-white/20 focus-visible:border-violet-400 focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.2)]",
+        neon: "bg-transparent border-2 border-primary/50 focus-visible:border-primary focus-visible:shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:border-primary/70 animate-pulse-subtle",
       }
     },
     defaultVariants: {

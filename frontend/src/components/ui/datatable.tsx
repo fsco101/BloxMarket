@@ -99,7 +99,7 @@ function DataTableInner<T = Record<string, unknown>>(
     loading = false,
     emptyMessage = 'No data available'
   }: DataTableProps<T>,
-  ref: React.Ref<DataTableRef>
+  ref: React.Ref<DataTableRef<T>>
 ) {
   const tableRef = useRef<HTMLTableElement>(null);
   const dataTableRef = useRef<any>(null);

@@ -13,31 +13,24 @@ import mongoose from 'mongoose';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { cloudinary } from '../config/cloudinary.js';
+
 // Configure storage for document uploads
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/documents');
-    cb(null, uploadDir);
-  },
-  filename: function(req, file, cb) {
-    // Create a unique filename with original extension
-    const fileExt = file.originalname.split('.').pop();
-    const filename = `${uuidv4()}.${fileExt}`;
-    cb(null, filename);
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bloxmarket/documents',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf']
   }
 });
 
 // Configure storage for face image uploads
-const faceStorage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/middlemanface');
-    cb(null, uploadDir);
-  },
-  filename: function(req, file, cb) {
-    // Create a unique filename with original extension
-    const fileExt = file.originalname.split('.').pop();
-    const filename = `face_${uuidv4()}.${fileExt}`;
-    cb(null, filename);
+const faceStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bloxmarket/middlemanface',
+    allowed_formats: ['jpg', 'jpeg', 'png']
   }
 });
 
@@ -46,13 +39,6 @@ export const upload = multer({
   storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB max file size
-  },
-  fileFilter: function(req, file, cb) {
-    // Accept images and PDFs only
-    if (!file.originalname.match(/\.(jpg|jpeg|png|gif|pdf)$/i)) {
-      return cb(new Error('Only image files and PDFs are allowed!'), false);
-    }
-    cb(null, true);
   }
 }).array('documents', 5); // Allow up to 5 files
 
@@ -61,13 +47,6 @@ export const uploadFace = multer({
   storage: faceStorage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB max file size for face images
-  },
-  fileFilter: function(req, file, cb) {
-    // Accept images only
-    if (!file.originalname.match(/\.(jpg|jpeg|png)$/i)) {
-      return cb(new Error('Only image files (JPG, PNG) are allowed for face verification!'), false);
-    }
-    cb(null, true);
   }
 }).array('faceImages', 3); // Allow up to 3 face images
 

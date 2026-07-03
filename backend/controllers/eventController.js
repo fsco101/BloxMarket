@@ -102,30 +102,13 @@ export const eventController = {
 
       console.log('Create event request:', { title, type, filesCount: uploadedFiles?.length || 0 });
 
-      // Check if user is admin or moderator
-      const user = await User.findById(userId);
-      if (!user || !['admin', 'moderator'].includes(user.role)) {
-        // Clean up uploaded files if user is not authorized
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
+      // Verify user is admin or moderator
+      if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: 'Only admins and moderators can create events' });
       }
 
       // Validate required fields
       if (!title || !description || !type || !startDate || !endDate) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
@@ -133,22 +116,14 @@ export const eventController = {
       const start = new Date(startDate);
       const end = new Date(endDate);
       if (start >= end) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'End date must be after start date' });
       }
 
-      // Process uploaded images
-      const images = [];
+      // Process new uploaded images
+      let newImages = [];
       if (uploadedFiles && uploadedFiles.length > 0) {
         uploadedFiles.forEach(file => {
-          images.push({
+          newImages.push({
             filename: file.filename,
             originalName: file.originalname,
             path: file.path,
@@ -187,12 +162,11 @@ export const eventController = {
         prizes: parsedPrizes,
         requirements: parsedRequirements,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : undefined,
-        images: images,
+        images: newImages,
         creator: {
           user_id: userId,
-          username: user.username,
-          avatar_url: user.avatar_url,
-          verified: user.verified || false
+          username: req.user.username,
+          avatar_url: req.user.avatar_url
         }
       });
 
@@ -202,21 +176,11 @@ export const eventController = {
       
       res.status(201).json({
         message: 'Event created successfully',
-        eventId: savedEvent._id,
-        imagesUploaded: images.length
+        event: newEvent
       });
 
     } catch (error) {
       console.error('Create event error:', error);
-      
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });
@@ -236,48 +200,21 @@ export const eventController = {
   updateEvent: async (req, res) => {
     try {
       const { eventId } = req.params;
-      const userId = req.user.userId;
       const { title, description, type, startDate, endDate, prizes, requirements, maxParticipants, removeImages } = req.body;
       const uploadedFiles = req.files;
 
-      console.log('Update event request:', { eventId, filesCount: uploadedFiles?.length || 0 });
-
       if (!mongoose.Types.ObjectId.isValid(eventId)) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'Invalid event ID' });
       }
 
       // Check if user is admin or moderator
-      const user = await User.findById(userId);
-      if (!user || !['admin', 'moderator'].includes(user.role)) {
-        // Clean up uploaded files if user is not authorized
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
+      if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
         return res.status(403).json({ error: 'Only admins and moderators can update events' });
       }
 
+      // Verify event exists
       const event = await Event.findById(eventId);
       if (!event) {
-        // Clean up uploaded files if event not found
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(404).json({ error: 'Event not found' });
       }
 
@@ -285,28 +222,12 @@ export const eventController = {
       let currentImages = [...(event.images || [])];
       if (removeImages) {
         const imagesToRemove = Array.isArray(removeImages) ? removeImages : [removeImages];
-        imagesToRemove.forEach(filename => {
-          const imageIndex = currentImages.findIndex(img => img.filename === filename);
-          if (imageIndex > -1) {
-            const imagePath = currentImages[imageIndex].path;
-            if (fs.existsSync(imagePath)) {
-              fs.unlinkSync(imagePath);
-            }
-            currentImages.splice(imageIndex, 1);
-          }
-        });
+        currentImages = currentImages.filter(img => !imagesToRemove.includes(img.filename));
       }
 
       // Process new uploaded images
       if (uploadedFiles && uploadedFiles.length > 0) {
-        // Check if adding new images would exceed the limit
         if (currentImages.length + uploadedFiles.length > 5) {
-          // Clean up uploaded files if would exceed limit
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
           return res.status(400).json({ error: 'Maximum 5 images allowed per event' });
         }
 
@@ -355,39 +276,21 @@ export const eventController = {
         updatedAt: new Date()
       };
 
-      // Validate dates if provided
       if (updateData.startDate >= updateData.endDate) {
-        // Clean up uploaded files if validation fails
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          uploadedFiles.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
         return res.status(400).json({ error: 'End date must be after start date' });
       }
 
-      await Event.findByIdAndUpdate(eventId, updateData);
+      const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, { new: true });
       
       console.log('Event updated successfully:', eventId);
       
-      res.json({ 
+      res.json({
         message: 'Event updated successfully',
-        imagesUploaded: uploadedFiles?.length || 0
+        event: updatedEvent
       });
 
     } catch (error) {
       console.error('Update event error:', error);
-      
-      // Clean up uploaded files on error
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
       
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'File size too large. Maximum 5MB per image.' });

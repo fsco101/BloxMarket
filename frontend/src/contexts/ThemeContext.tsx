@@ -11,28 +11,22 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Check local storage or system preference
-    const savedTheme = localStorage.getItem('bloxmarket-theme');
-    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const theme: Theme = 'light'; // Forced light mode (dirty white theme)
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    localStorage.setItem('bloxmarket-theme', theme);
-  }, [theme]);
+    root.classList.remove('dark');
+    root.classList.add('light');
+    localStorage.setItem('bloxmarket-theme', 'light');
+  }, []);
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
+  // Stub function to prevent breaking components that call it
+  const toggleTheme = () => { };
 
   const value = {
     theme,
     toggleTheme,
-    isDark: theme === 'dark'
+    isDark: false
   };
 
   return (

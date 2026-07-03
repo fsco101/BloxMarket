@@ -123,13 +123,25 @@ const getAvatarUrl = (avatarUrl?: string) => {
   }
 
   if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-    return `http://localhost:5000${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
   }
 
   console.log('getAvatarUrl: Processing filename:', avatarUrl);
-  const fullUrl = `http://localhost:5000/api/uploads/avatars/${avatarUrl}`;
+  const fullUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/avatars/${avatarUrl}`;
   console.log('getAvatarUrl: Generated URL:', fullUrl);
   return fullUrl;
+};
+
+// Helper function to get trade image URL
+const getTradeImageUrl = (imageUrl?: string) => {
+  if (!imageUrl) return '';
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return imageUrl;
+  }
+  if (imageUrl.startsWith('/api/uploads/')) {
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${imageUrl}`;
+  }
+  return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${imageUrl.startsWith('/') ? imageUrl : `/uploads/trades/${imageUrl}`}`;
 };
 
 interface Trade {
@@ -786,7 +798,7 @@ function TradeDetailsModal({ trade, isOpen, onClose, onEdit, onDelete, canEdit, 
                 {trade.images.map((image, index) => (
                   <div key={index} className="aspect-square overflow-hidden rounded-lg border cursor-pointer hover:shadow-md transition-shadow">
                     <ImageDisplay
-                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${image.image_url.startsWith('/') ? image.image_url : `/uploads/trades/${image.image_url}`}`}
+                      src={getTradeImageUrl(image.image_url)}
                       alt={`Trade image ${index + 1}`}
                       className="w-full h-full"
                     />
@@ -1397,7 +1409,7 @@ export function TradingHub() {
       avatar_url: trade.avatar_url || ''
     },
     timestamp: trade.created_at,
-    images: (trade.images || []).map(img => ({ url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${img.image_url.startsWith('/') ? img.image_url : `/uploads/trades/${img.image_url}`}`, type: 'trade' })),
+    images: (trade.images || []).map(img => ({ url: getTradeImageUrl(img.image_url), type: 'trade' })),
     comments: trade.comment_count || 0,
     upvotes: trade.upvotes || 0,
     downvotes: trade.downvotes || 0
@@ -1685,7 +1697,7 @@ export function TradingHub() {
     // Load existing images for preview (these are server URLs, not File objects)
     if (trade.images && trade.images.length > 0) {
       const existingImageUrls = trade.images.map(img => 
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${img.image_url.startsWith('/') ? img.image_url : `/uploads/trades/${img.image_url}`}`
+        getTradeImageUrl(img.image_url)
       );
       setEditImagePreviewUrls(existingImageUrls);
       // Note: existing images are not File objects, so editUploadSelectedImages stays empty
@@ -2248,7 +2260,7 @@ export function TradingHub() {
                         handleImageClick(trade.images!, 0);
                       }}>
                         <ImageDisplay
-                          src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${trade.images[0].image_url.startsWith('/') ? trade.images[0].image_url : `/uploads/trades/${trade.images[0].image_url}`}`}
+                          src={getTradeImageUrl(trade.images[0].image_url)}
                           alt={`${trade.item_offered} - Trade item`}
                           className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
                         />
@@ -2489,7 +2501,7 @@ export function TradingHub() {
         <DialogContent className="max-w-4xl max-h-[90vh] p-0">
           <ImageViewer
             images={modalSelectedImages.map(img => ({
-              url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${img.image_url.startsWith('/') ? img.image_url : `/uploads/trades/${img.image_url}`}`,
+              url: getTradeImageUrl(img.image_url),
               type: 'trade' as const
             }))}
             currentIndex={currentImageIndex}

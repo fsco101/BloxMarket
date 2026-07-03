@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : 'http://localhost:5000/api';
 import { shouldThrottle, queueRequest } from '../lib/throttle';
 import { handleRateLimit } from '../lib/rateLimitHandler';
 import { alertService } from './alertService';
@@ -43,7 +43,7 @@ class ApiService {
   }
 
   // Track pending requests to prevent duplicates
-  private pendingRequests = new Map<string, Promise<unknown>>();
+  private pendingRequests = new Map<string, Promise<any>>();
 
   // Determine request category based on endpoint
   private getRequestCategory(endpoint: string): 'auth' | 'standard' | 'heavy' {
@@ -119,7 +119,7 @@ class ApiService {
     return this.executeRequest(endpoint, config, url, requestId, requestKey || undefined);
   }
 
-  private async executeRequest(endpoint: string, config: RequestInit, url: string, requestId: string, requestKey?: string): Promise<unknown> {
+  private async executeRequest(endpoint: string, config: RequestInit, url: string, requestId: string, requestKey?: string): Promise<any> {
     const isGetRequest = config.method === 'GET' || !config.method;
     
     try {
@@ -1171,7 +1171,7 @@ class ApiService {
   }
 
   // Enhanced request method with automatic error handling
-  async requestWithAlerts(endpoint: string, options: RequestInit = {}, showErrors: boolean = true): Promise<unknown> {
+  async requestWithAlerts(endpoint: string, options: RequestInit = {}, showErrors: boolean = true): Promise<any> {
     try {
       return await this.request(endpoint, options);
     } catch (error) {

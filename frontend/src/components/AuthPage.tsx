@@ -8,89 +8,95 @@ export function AuthPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Fallback gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-50 dark:bg-[#0A0A0B] text-slate-900 dark:text-slate-200 transition-colors duration-500">
+      
+      {/* Premium Background with Image */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: 'url(/landingpage.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'fixed'
+          }}
+        />
+        
+        {/* Responsive overlay for readability */}
+        <div className="absolute inset-0 bg-white/40 backdrop-blur-sm dark:bg-black/60 dark:backdrop-blur-none transition-all duration-500 z-0" />
+        
+        {/* Glow Effects */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse-slow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-violet-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse-slow" />
+      </div>
 
-      {/* Background Image with Blur and Gray Shade */}
-      <div
-        className="absolute inset-0 bg-center bg-no-repeat"
-        style={{
-          backgroundImage: `url('/landingpage.jpg')`,
-          backgroundSize: 'cover',
-          filter: 'blur(3px) grayscale(20%) brightness(0.8)',
-          transform: 'scale(1.1)', // Slight scale to prevent blur edges
-        }}
-      />
-      {/* Enhanced Overlay for better text readability */}
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-900/60 via-gray-800/50 to-gray-900/60" />      {/* Content */}
+      {/* Main Card */}
       <div className="relative w-full max-w-md z-10">
-        {/* Theme Toggle
-        <div className="flex justify-end mb-4">
-          <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg p-2">
-            {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            <Switch checked={isDark} onCheckedChange={toggleTheme} />
-          </div>
-        </div> */}
-
-        {/* Logo */}
+        
+        {/* Welcome Text */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center width-300 height-200">
-            <img 
-              src="/NEWLOGO1.gif" 
-              alt="BloxMarket Logo" 
-              className="w-full h-full object-contain"
-              style={{objectFit: 'contain'}}
-            />
-          </div>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight mb-2 transition-colors">Welcome to BloxMarket</h1>
+          <p className="text-slate-600 dark:text-slate-400 font-medium transition-colors">
             The ultimate Roblox trading community
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'register')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="register">Register</TabsTrigger>
-          </TabsList>
+        <div className="bg-white/60 dark:bg-white/[0.02] border border-slate-200 dark:border-white/10 backdrop-blur-xl rounded-3xl p-6 shadow-2xl transition-all duration-500">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'register')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-slate-200/50 dark:bg-black/40 border border-slate-300/50 dark:border-white/5 rounded-xl p-1 mb-6 transition-colors">
+              <TabsTrigger 
+                value="login" 
+                className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300 rounded-lg transition-all"
+              >
+                Login
+              </TabsTrigger>
+              <TabsTrigger 
+                value="register"
+                className="data-[state=active]:bg-violet-500/20 data-[state=active]:text-violet-300 rounded-lg transition-all"
+              >
+                Register
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="login">
-            <div className="space-y-4">
-              <SocialLogin />
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+            <TabsContent value="login" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+              <div className="space-y-6">
+                <SocialLogin />
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-slate-300 dark:border-white/10 transition-colors" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase font-medium tracking-widest">
+                    <span className="bg-white dark:bg-[#0f1115] px-4 text-slate-500 rounded-full border border-slate-200 dark:border-white/5 transition-colors">
+                      Or continue with email
+                    </span>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or continue with email
-                  </span>
-                </div>
+                <Login />
               </div>
-              <Login />
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="register">
-            <div className="space-y-4">
-              <SocialLogin />
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+            <TabsContent value="register" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+              <div className="space-y-6">
+                <SocialLogin />
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-slate-300 dark:border-white/10 transition-colors" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase font-medium tracking-widest">
+                    <span className="bg-white dark:bg-[#0f1115] px-4 text-slate-500 rounded-full border border-slate-200 dark:border-white/5 transition-colors">
+                      Or continue with email
+                    </span>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or continue with email
-                  </span>
-                </div>
+                <Registration />
               </div>
-              <Registration />
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          By signing up, you agree to our Terms of Service and Privacy Policy
+        <p className="text-center text-sm text-slate-600 dark:text-slate-500 mt-8 transition-colors">
+          By signing up, you agree to our <a href="#" className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors">Terms of Service</a> and <a href="#" className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors">Privacy Policy</a>
         </p>
       </div>
     </div>

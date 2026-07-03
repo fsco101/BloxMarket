@@ -52,7 +52,7 @@ interface WishlistItem {
   comment_count?: number;
   upvotes?: number;
   downvotes?: number;
-  images?: { filename: string; originalName?: string }[]; // Add this line
+  images?: { filename: string; originalName?: string; image_url?: string }[]; // Updated this line
 }
 
 interface WishlistComment {
@@ -125,11 +125,11 @@ const getAvatarUrl = (avatarUrl?: string) => {
   }
 
   if (avatarUrl.startsWith('/uploads/') || avatarUrl.startsWith('/api/uploads/')) {
-    return `http://localhost:5000${avatarUrl}`;
+    return `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarUrl}`;
   }
 
   console.log('getAvatarUrl: Processing filename:', avatarUrl);
-  const fullUrl = `http://localhost:5000/api/uploads/avatars/${avatarUrl}`;
+  const fullUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/uploads/avatars/${avatarUrl}`;
   console.log('getAvatarUrl: Generated URL:', fullUrl);
   return fullUrl;
 };
@@ -150,7 +150,7 @@ const transformWishlistToPostModal = (wishlist: WishlistItem): PostModalPost => 
     },
     timestamp: formatDate(wishlist.created_at),
     images: wishlist.images?.map(img => ({
-      url: `http://localhost:5000/uploads/wishlists/${img.filename}`,
+      url: img.image_url?.startsWith('http') ? img.image_url : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/wishlists/${img.filename}`,
       type: 'wishlist' as const
     })) || [],
     comments: wishlist.comment_count || 0,
@@ -310,10 +310,11 @@ function WishlistDetailsModal({
       console.log('Adding comment to wishlist:', wishlist.wishlist_id);
       
       const response = await apiService.addWishlistComment(wishlist.wishlist_id, newComment);
+      const newCommentObj = response as WishlistComment;
       
       // Check if the response has the comment structure we expect
-      if (response && response.content) {
-        setComments(prev => [response, ...prev]);
+      if (newCommentObj && newCommentObj.content) {
+        setComments(prev => [newCommentObj, ...prev]);
         setNewComment('');
         toast.success('Comment added!');
       } else {
@@ -436,10 +437,10 @@ function WishlistDetailsModal({
                 {wishlist.images.map((image, index) => (
                   <div key={index} className="relative aspect-square rounded-md overflow-hidden border group">
                     <img 
-                      src={`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`}
+                      src={image.image_url?.startsWith('http') ? image.image_url : `${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`}
                       alt={`Item image ${index + 1}`}
                       className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      onClick={() => window.open(`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`, '_blank')}
+                      onClick={() => window.open(image.image_url?.startsWith('http') ? image.image_url : `${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`, '_blank')}
                       crossOrigin="anonymous"
                       onError={(e) => {
                         console.error('Image failed to load:', image.filename);
@@ -1840,12 +1841,12 @@ export function Wishlist() {
                           {item.images.slice(0, 3).map((image, imgIndex) => (
                             <div key={imgIndex} className="relative flex-shrink-0">
                               <img 
-                                src={`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`}
+                                src={image.image_url?.startsWith('http') ? image.image_url : `${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`}
                                 alt={`Preview ${imgIndex + 1}`}
                                 className="w-16 h-16 object-cover rounded-md border hover:scale-105 transition-transform cursor-pointer"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  window.open(`${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`, '_blank');
+                                  window.open(image.image_url?.startsWith('http') ? image.image_url : `${window.location.protocol}//${window.location.hostname}:5000/uploads/wishlists/${image.filename}`, '_blank');
                                 }}
                                 onError={(e) => {
                                   (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64?text=Img';
